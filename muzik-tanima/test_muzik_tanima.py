@@ -30,7 +30,8 @@ ORNEK_SHAZAM_YANITI = {
                 {"title": "Label", "text": "Örnek Plak"},
                 {"title": "Released", "text": "2021"},
             ]},
-            {"type": "LYRICS", "text": ["..."]},
+            {"type": "LYRICS", "text": ["..."], "footer": "Writer(s): A  B\nLyrics powered by X",
+             "beacondata": {"providername": "musixmatch"}},
         ],
     },
 }
@@ -48,6 +49,9 @@ class AyristirmaTesti(unittest.TestCase):
         self.assertIn("apple_music", s["linkler"])
         self.assertIn("spotify", s["linkler"])
         self.assertTrue(s["ekstra"]["sozler_mevcut"])
+        self.assertEqual(s["ekstra"]["soz_kredisi"], "Writer(s): A B Lyrics powered by X")
+        self.assertEqual(s["ekstra"]["soz_saglayici"], "musixmatch")
+        self.assertNotIn("text", s["ekstra"])
 
     def test_shazam_bos(self):
         self.assertIsNone(mt.shazam_ayristir({"matches": []}))
@@ -80,6 +84,7 @@ class PlanVeBirlestirmeTesti(unittest.TestCase):
         self.assertEqual(sonuc[0].zaman_araliklari, [[0, 42], [90, 102]])
         self.assertEqual(sonuc[0].eslesme_sayisi, 4)
         self.assertEqual(sonuc[0].guven, 0.5)
+        self.assertIn("sozler_genius", sonuc[0].linkler)
 
 
 class UctanUcaTest(unittest.TestCase):

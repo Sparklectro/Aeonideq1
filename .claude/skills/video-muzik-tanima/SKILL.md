@@ -48,6 +48,7 @@ Her şarkı için:
 • Videoda çaldığı yer: 00:15–01:02
 • Şarkının ~01:03'ünden itibaren kullanılmış      (sarkidaki_konum_sn varsa)
 • Linkler: Spotify · Apple Music · YouTube · Shazam
+• Sözler: Shazam · Genius · Musixmatch      (+ "Söz/beste: …" kredisi varsa)
 • Güven: %70 (7 eşleşme)
 ```
 
@@ -57,7 +58,9 @@ Kurallar:
 - Birden çok şarkı varsa videodaki sıraya göre listele.
 - `platform_ipucu` içinde `track`/`artist` varsa (YouTube'un "Bu videodaki müzik" etiketi gibi)
   bunu da belirt; Shazam sonucuyla çelişiyorsa ikisini de göster.
-- Şarkı sözlerini kopyalayıp yazma; `ekstra.sozler_mevcut` true ise sözlerin Shazam linkinde olduğunu söyle.
+- Şarkı sözlerinin metnini yazma, alıntılama ya da başka kaynaktan çekip ekleme (telifli içerik).
+  Bunun yerine `linkler.sozler_*` linklerini ver; `ekstra.sozler_mevcut` true ise Shazam sayfasında
+  sözlerin bulunduğunu, `ekstra.soz_kredisi` varsa söz/beste kredisini belirt.
 
 ## Sorun giderme
 

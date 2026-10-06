@@ -2,7 +2,8 @@
 
 Herhangi bir videodaki arka plan müziğini ve şarkıları tanır: **sanatçı, şarkı adı, albüm,
 yıl, tür, plak şirketi, ISRC**, şarkının **videoda çaldığı zaman aralıkları**, şarkının hangi
-saniyesinden kullanıldığı ve **Spotify / Apple Music / YouTube / Shazam / MusicBrainz** linkleri.
+saniyesinden kullanıldığı, **Spotify / Apple Music / YouTube / Shazam / MusicBrainz** linkleri ve
+şarkı sözleri için Shazam / Genius / Musixmatch linkleri (varsa söz/beste kredisiyle).
 
 Hem yerel dosya (`.mp4`, `.mov`, `.mkv`, `.webm`, ses dosyaları…) hem de link
 (YouTube, Instagram, TikTok, X, Facebook… — yt-dlp'nin desteklediği her yer) kabul eder.

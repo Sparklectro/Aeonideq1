@@ -254,7 +254,18 @@ def shazam_ayristir(yanit: dict[str, Any]) -> Optional[dict[str, Any]]:
 
     eslesmeler = yanit.get("matches") or [{}]
     konum = eslesmeler[0].get("offset")
-    lyrics = any(b.get("type") == "LYRICS" for b in track.get("sections", []) or [])
+    soz_bolumu = next((b for b in track.get("sections", []) or [] if b.get("type") == "LYRICS"), None)
+    ekstra: dict[str, Any] = {"explicit": (track.get("hub") or {}).get("explicit"),
+                              "sozler_mevcut": soz_bolumu is not None}
+    if soz_bolumu:
+        # Söz metninin kendisi telifli olduğundan alınmaz; yalnızca yazar/yayıncı kredisi ve kaynak.
+        if soz_bolumu.get("footer"):
+            ekstra["soz_kredisi"] = " ".join(str(soz_bolumu["footer"]).split())
+        saglayici = (soz_bolumu.get("beacondata") or {}).get("providername")
+        if saglayici:
+            ekstra["soz_saglayici"] = saglayici
+        if track.get("url"):
+            linkler["sozler_shazam"] = track["url"]
 
     return {
         "anahtar": f"shazam:{track.get('key')}",
@@ -269,7 +280,7 @@ def shazam_ayristir(yanit: dict[str, Any]) -> Optional[dict[str, Any]]:
         or (track.get("images") or {}).get("coverart"),
         "sarkidaki_konum_sn": round(konum, 1) if isinstance(konum, (int, float)) else None,
         "linkler": linkler,
-        "ekstra": {"explicit": track.get("hub", {}).get("explicit"), "sozler_mevcut": lyrics},
+        "ekstra": ekstra,
     }
 
 
@@ -371,6 +382,17 @@ def musicbrainz_zenginlestir(sarki: Sarki) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def soz_linkleri(sanatci: str, sarki: str) -> dict[str, str]:
+    """Şarkı sözlerini lisanslı sitelerde bulmak için arama linkleri."""
+    # "Şarkı (X Remix)" gibi eklerde arama sonuçları zayıflar; parantezi at.
+    temiz = sarki.split(" (")[0].strip() or sarki
+    q = urllib.parse.quote(f"{sanatci} {temiz}")
+    return {
+        "sozler_genius": f"https://genius.com/search?q={q}",
+        "sozler_musixmatch": f"https://www.musixmatch.com/search?query={q}",
+    }
+
+
 def eslesmeleri_birlestir(eslesmeler: list[Eslesme], pencere_sayisi: int,
                           bosluk_toleransi: float) -> list[Sarki]:
     gruplar: dict[str, Sarki] = {}
@@ -407,6 +429,7 @@ def eslesmeleri_birlestir(eslesmeler: list[Eslesme], pencere_sayisi: int,
     sonuc = [gruplar[a] for a in sira]
     for s in sonuc:
         s.guven = round(s.eslesme_sayisi / max(pencere_sayisi, 1), 2)
+        s.linkler.update(soz_linkleri(s.sanatci, s.sarki))
     return sonuc
 
 
@@ -521,6 +544,8 @@ def rapor_yaz(sonuc: dict[str, Any]) -> str:
         ):
             if deger:
                 satirlar.append(f"   {etiket:<13}: {deger}")
+        if s["ekstra"].get("soz_kredisi"):
+            satirlar.append(f"   {'Söz/beste':<13}: {s['ekstra']['soz_kredisi']}")
         mb = s["ekstra"].get("musicbrainz") or {}
         if mb.get("sure_sn"):
             satirlar.append(f"   {'Şarkı süresi':<13}: {sure_metni(mb['sure_sn'])}")
