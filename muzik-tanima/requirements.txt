@@ -1,0 +1,3 @@
+shazamio>=0.8
+yt-dlp>=2024.1.1
+audioop-lts; python_version >= "3.13"
