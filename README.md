@@ -3,6 +3,19 @@
 Bu dal (`master`) eski kişisel projeleri barındırır. Şirket projeleri
 [`Aeonideq`](https://github.com/Sparklectro/Aeonideq1/tree/Aeonideq) dalındadır.
 
+## 📱 Kumanda
+
+Telefondan bilgisayara tam hakimiyet: gerçek PowerShell/bash terminali (Claude Code dahil),
+GitHub projelerini listeleme/klonlama/commit/push, dosya düzenleme ve geliştirme sunucusu
+önizlemesi. Bilgisayarda küçük bir Node.js sunucusu, telefonda ana ekrana eklenebilen bir
+web uygulaması (PWA). Ayrıntılar: [`kumanda/README.md`](kumanda/README.md).
+
+```bash
+cd kumanda
+npm install
+npm start                            # QR kodu telefonla okut
+```
+
 ## 🐦 Civilti (eski kurs projesi)
 
 Yaklaşık 7–8 yıl önce bir Python/Django web geliştirme kursu kapsamında yazılmış alıştırma

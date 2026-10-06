@@ -1,0 +1,24 @@
+{
+  "name": "kumanda",
+  "version": "0.1.0",
+  "description": "Telefondan bilgisayarına tam hakimiyet: gerçek terminal (PowerShell/bash), GitHub projeleri, dosya düzenleme ve önizleme.",
+  "type": "module",
+  "main": "server/index.js",
+  "bin": { "kumanda": "server/index.js" },
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "qrcode-terminal": "^0.12.0",
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "@lydell/node-pty": "^1.1.0"
+  },
+  "license": "MIT"
+}

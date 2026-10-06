@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#0f1115">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Kumanda</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="vendor/xterm.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Giriş -->
+  <section id="login" class="screen" hidden>
+    <div class="login-box">
+      <img src="icons/icon.svg" alt="" width="72" height="72">
+      <h1>Kumanda</h1>
+      <p>Bilgisayardaki sunucunun yazdırdığı erişim anahtarını gir ya da QR kodu okut.</p>
+      <form id="login-form">
+        <input id="login-token" type="password" placeholder="Erişim anahtarı" autocomplete="current-password" required>
+        <button class="btn primary" type="submit">Bağlan</button>
+      </form>
+      <p id="login-error" class="error"></p>
+    </div>
+  </section>
+
+  <!-- Uygulama -->
+  <div id="app" hidden>
+    <header class="topbar">
+      <div class="host"><span id="conn-dot" class="dot"></span><span id="host-name">…</span></div>
+      <div class="top-actions">
+        <button class="icon-btn" id="font-down" title="Yazı küçült">A−</button>
+        <button class="icon-btn" id="font-up" title="Yazı büyüt">A+</button>
+        <button class="icon-btn" id="open-settings" title="Ayarlar">⚙</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- Terminal -->
+      <section class="view" id="view-term">
+        <div class="session-bar">
+          <div id="session-tabs" class="session-tabs"></div>
+          <button class="chip add" id="new-session" title="Yeni terminal">＋</button>
+        </div>
+        <div id="term-wrap"><div id="terminal"></div><div id="term-empty" class="empty">Terminal yok. ＋ ile yeni bir tane aç.</div></div>
+        <div id="line-input" class="line-input" hidden>
+          <input id="line-text" type="text" placeholder="Komut yaz, Enter ile gönder" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
+          <button class="btn primary" id="line-send">⏎</button>
+        </div>
+        <div id="keybar" class="keybar"></div>
+      </section>
+
+      <!-- Projeler -->
+      <section class="view" id="view-projects" hidden>
+        <div class="toolbar">
+          <h2>Projeler</h2>
+          <button class="btn" id="refresh-projects">Yenile</button>
+        </div>
+        <div id="project-list" class="list"></div>
+
+        <div class="toolbar">
+          <h2>GitHub</h2>
+          <button class="btn" id="load-repos">Depoları getir</button>
+        </div>
+        <form id="clone-form" class="row">
+          <input id="clone-url" placeholder="sahip/depo veya https://…git" autocapitalize="off" autocorrect="off">
+          <button class="btn primary">Klonla</button>
+        </form>
+        <input id="repo-filter" class="filter" placeholder="Depolarda ara" hidden>
+        <div id="repo-list" class="list"></div>
+      </section>
+
+      <!-- Dosyalar -->
+      <section class="view" id="view-files" hidden>
+        <div class="toolbar">
+          <input id="fs-path" class="path" autocapitalize="off" autocorrect="off" spellcheck="false">
+          <button class="btn" id="fs-go">Git</button>
+        </div>
+        <div class="row small-actions">
+          <button class="btn" id="fs-up">↑ Üst</button>
+          <button class="btn" id="fs-new-file">＋ Dosya</button>
+          <button class="btn" id="fs-new-dir">＋ Klasör</button>
+          <button class="btn" id="fs-term">Burada terminal</button>
+        </div>
+        <div id="fs-list" class="list"></div>
+      </section>
+
+      <!-- Önizleme -->
+      <section class="view" id="view-preview" hidden>
+        <form id="preview-form" class="toolbar">
+          <input id="preview-url" placeholder="Port (3000) veya tam adres" autocapitalize="off" autocorrect="off">
+          <button class="btn primary">Aç</button>
+          <button class="btn" type="button" id="preview-ext" title="Yeni sekmede aç">↗</button>
+        </form>
+        <iframe id="preview-frame" title="Önizleme"></iframe>
+      </section>
+    </main>
+
+    <nav class="tabbar">
+      <button data-view="term" class="active"><span>⌨</span>Terminal</button>
+      <button data-view="projects"><span>⎇</span>Projeler</button>
+      <button data-view="files"><span>🗀</span>Dosyalar</button>
+      <button data-view="preview"><span>◉</span>Önizleme</button>
+    </nav>
+  </div>
+
+  <!-- Editör -->
+  <section id="editor" class="sheet" hidden>
+    <header class="topbar">
+      <button class="icon-btn" id="editor-close">✕</button>
+      <div id="editor-name" class="editor-name"></div>
+      <button class="btn primary" id="editor-save">Kaydet</button>
+    </header>
+    <textarea id="editor-text" spellcheck="false" autocapitalize="off" autocorrect="off" wrap="off"></textarea>
+  </section>
+
+  <!-- Ayarlar -->
+  <section id="settings" class="sheet" hidden>
+    <header class="topbar">
+      <button class="icon-btn" id="settings-close">✕</button>
+      <div class="editor-name">Ayarlar</div>
+      <span></span>
+    </header>
+    <div class="settings-body">
+      <dl id="info-list" class="info"></dl>
+      <label>Projeler klasörü<input id="set-workspace" autocapitalize="off" autocorrect="off"></label>
+      <label>GitHub jetonu (boş bırakılırsa bilgisayardaki <code>gh</code> girişi kullanılır)
+        <input id="set-gh" type="password" placeholder="ghp_… / github_pat_…" autocomplete="off"></label>
+      <button class="btn primary" id="save-settings">Kaydet</button>
+      <label class="check"><input type="checkbox" id="set-line"> Satır modu (komutu önce yaz, sonra gönder — klavye otomatik düzeltmesiyle sorun yaşarsan)</label>
+      <label>Hızlı komutlar (her satır: <code>etiket=komut</code>)
+        <textarea id="set-snippets" rows="6" spellcheck="false" autocapitalize="off"></textarea></label>
+      <button class="btn" id="save-snippets">Hızlı komutları kaydet</button>
+      <hr>
+      <button class="btn danger" id="logout">Çıkış yap</button>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="vendor/xterm.js"></script>
+  <script src="vendor/addon-fit.js"></script>
+  <script src="vendor/addon-web-links.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
