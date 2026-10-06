@@ -67,6 +67,8 @@ class PlanVeBirlestirmeTesti(unittest.TestCase):
     def test_son_kisim_kapsanir(self):
         plan = mt.pencereleri_planla(50, 12, 15)
         self.assertEqual(plan[-1][0] + plan[-1][1], 50)
+        plan = mt.pencereleri_planla(38.1, 12, 6)  # gerçek videoda son 2 sn atlanıyordu
+        self.assertAlmostEqual(plan[-1][0] + plan[-1][1], 38.1)
 
     def test_birlestirme(self):
         d = mt.shazam_ayristir(ORNEK_SHAZAM_YANITI)

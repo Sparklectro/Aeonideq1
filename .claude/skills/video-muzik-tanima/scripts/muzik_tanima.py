@@ -183,7 +183,7 @@ def pencereleri_planla(toplam: float, pencere: float, adim: float) -> list[tuple
         t += adim
     # Sonda kalan kısmı da kapsa
     son_bas = max(0.0, toplam - pencere)
-    if not araliklar or araliklar[-1][0] < son_bas - adim / 2:
+    if not araliklar or araliklar[-1][0] + pencere < toplam - 0.5:
         araliklar.append((son_bas, pencere))
     return araliklar
 
