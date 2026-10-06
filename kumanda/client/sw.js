@@ -1,6 +1,6 @@
 // Uygulama kabuğunu önbelleğe alır: ağ yoksa bile arayüz açılır. API ve WebSocket hiç önbelleğe alınmaz.
-const CACHE = 'kumanda-v1';
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icons/icon.svg',
+const CACHE = 'kumanda-v2';
+const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'rehber.html', 'icons/icon.svg',
   'vendor/xterm.js', 'vendor/xterm.css', 'vendor/addon-fit.js', 'vendor/addon-web-links.js'];
 
 self.addEventListener('install', (e) => {

@@ -126,3 +126,15 @@ test('yerel git projeleri listelenir, commit çalışır', async () => {
   assert.equal(c.data.ok, true, c.data.output);
   assert.equal(c.data.status.changed, 0);
 });
+
+test('terminal boyutu değişince kabuk yeni boyutu görür', async () => {
+  const { data: s } = await api('/api/sessions', { method: 'POST', body: { cols: 80, rows: 24 } });
+  const ws = openWs(s.id);
+  await ws.hello;
+  ws.send(JSON.stringify({ t: 'resize', cols: 61, rows: 17 }));
+  await new Promise((r) => setTimeout(r, 300));
+  ws.send(JSON.stringify({ t: 'i', d: 'stty size\r' }));
+  await ws.waitFor('17 61');
+  ws.close();
+  await api('/api/sessions?id=' + s.id, { method: 'DELETE' });
+});

@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1115">
+  <title>Kumanda Rehberi</title>
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    html, body { height: auto; }
+    body { padding: 0 16px 48px; overscroll-behavior: auto; }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    .head { position: sticky; top: 0; background: var(--bg); padding: 12px 0 8px; display: flex; gap: 8px; align-items: center; z-index: 2; border-bottom: 1px solid var(--line); }
+    .head h1 { font-size: 18px; margin: 0; flex: 1; }
+    nav.toc { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; scrollbar-width: none; }
+    nav.toc a { flex: none; font-size: 13px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--text); text-decoration: none; background: var(--panel); }
+    h2 { font-size: 17px; margin: 28px 0 8px; scroll-margin-top: 60px; }
+    p, li { color: var(--text); }
+    .note { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+    .warn { border-left-color: var(--bad); }
+    ol.check { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+    ol.check li { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    ol.check label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+    ol.check label > span { min-width: 0; flex: 1; }
+    .tbl { overflow-x: auto; }
+    ol.check input { width: 20px; height: 20px; flex: none; margin-top: 1px; accent-color: var(--ok); }
+    ol.check input:checked + span { opacity: .55; text-decoration: line-through; }
+    ol.check small { display: block; color: var(--muted); margin-top: 3px; }
+    pre { background: #0b0d10; border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow-x: auto; font: 12.5px/1.5 var(--mono); }
+    code { background: var(--panel-2); padding: 1px 5px; border-radius: 5px; }
+    pre code { background: none; padding: 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    td, th { border-bottom: 1px solid var(--line); padding: 7px 6px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 500; }
+    td:first-child code { white-space: nowrap; }
+    .layers { display: grid; gap: 6px; }
+    .layers div { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+    .layers b { color: var(--accent); }
+    .reset { font-size: 12px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <a class="btn sm" href="./">← Kumanda</a>
+    <h1>Rehber</h1>
+  </div>
+  <nav class="toc">
+    <a href="#katmanlar">Nasıl çalışır</a>
+    <a href="#kurulum">Kurulum</a>
+    <a href="#gecis">PC → Telefon</a>
+    <a href="#donus">Telefon → PC</a>
+    <a href="#her-gun">Her oturum</a>
+    <a href="#kurallar">Altın kurallar</a>
+    <a href="#claude">Claude ipuçları</a>
+    <a href="#komutlar">Komutlar</a>
+    <a href="#sorun">Sorun giderme</a>
+  </nav>
+
+  <h2 id="katmanlar">Nasıl çalışır</h2>
+  <p>Her şey telefonun içinde çalışır. Bilgisayara ya da internete hiçbir kapı açılmaz.</p>
+  <div class="layers">
+    <div><b>Termux</b> — telefonun PowerShell'i. Gerçek bir Linux terminali: <code>git</code>, <code>node</code>, <code>python</code>…</div>
+    <div><b>Ubuntu (proot)</b> — Termux'un içindeki küçük Ubuntu. Claude Code Android'de doğrudan çalışmadığı için burada çalışır. <code>claude</code> yazınca oraya otomatik geçilir.</div>
+    <div><b>Claude Code</b> — "harness" dediğin şey bu: modeli dosyalarına ve terminaline bağlayan, komut çalıştırıp dosya düzenleyebilen program. PC'de nasıl çalışıyorsa burada da öyle çalışır.</div>
+    <div><b>Kumanda</b> — bu panel. Termux'ta çalışır, Chrome'da açılır. Terminal sekmeleri, GitHub projeleri, dosyalar, önizleme. Sadece <code>127.0.0.1</code>'e açıktır: telefonun dışından kimse bağlanamaz.</div>
+  </div>
+  <div class="note">Projeler <code>~/projeler</code> klasöründe durur. Termux, Ubuntu ve Claude aynı klasörü görür.</div>
+
+  <h2 id="kurulum">Bir kerelik kurulum</h2>
+  <ol class="check" data-list="kurulum">
+    <li><label><input type="checkbox"><span><b>Termux</b>'u F-Droid'den ya da GitHub'dan kur, <b>Play Store'dan değil</b>.
+      <small>f-droid.org → "Termux" ya da github.com/termux/termux-app/releases → <code>arm64-v8a</code> APK. Play Store sürümü farklı imzalı; karışırsa paketler kurulmaz.</small></span></label></li>
+    <li><label><input type="checkbox"><span>Termux'u aç ve kurulum komutunu yapıştır:
+      <pre><code>curl -fsSL https://raw.githubusercontent.com/Sparklectro/Aeonideq1/ccr-0958c9ab-0uudov/kumanda/termux/kurulum.sh | bash</code></pre>
+      <small>Wi-Fi'de yap (birkaç yüz MB indirir). 10–20 dakika sürebilir. Takılırsa aynı komutu tekrar çalıştır; kaldığı yerden devam eder.</small></span></label></li>
+    <li><label><input type="checkbox"><span>Sorulduğunda: dosya izni → <b>İzin ver</b>; ad ve e-posta yaz; GitHub kodunu tarayıcıda onayla.</span></label></li>
+    <li><label><input type="checkbox"><span>Termux'ta <code>claude</code> yaz → Anthropic hesabınla giriş yap.
+      <small>Çıkan bağlantıyı Chrome'da aç, onayla, verilen kodu Termux'a yapıştır. Bir kez yapılır.</small></span></label></li>
+    <li><label><input type="checkbox"><span>Pil: <b>Ayarlar → Uygulamalar → Termux → Pil → Kısıtlamasız</b>.
+      <small>Yapmazsan Android ekran kapanınca Termux'u durdurur, Claude yarıda kalır.</small></span></label></li>
+    <li><label><input type="checkbox"><span>Termux'ta <code>kumanda</code> yaz → Chrome açılır → <b>⋮ → Ana ekrana ekle</b>.</span></label></li>
+    <li><label><input type="checkbox"><span>(Android 14+) Ayarlar → Geliştirici seçenekleri → <b>"Alt süreç kısıtlamalarını devre dışı bırak"</b> aç.
+      <small>Android, arka planda çok süreç çalıştıran uygulamaları öldürebiliyor ("signal 9" hatası). Geliştirici seçenekleri kapalıysa: Telefon hakkında → Yapı numarası'na 7 kez dokun.</small></span></label></li>
+  </ol>
+
+  <h2 id="gecis">Bilgisayardan telefona geçerken</h2>
+  <div class="note warn"><b>Tek kural:</b> bir proje aynı anda tek cihazda düzenlenir. Bırakmadan önce <b>push</b>, başlamadan önce <b>pull</b>.</div>
+  <p><b>Bilgisayarda, kalkmadan önce</b> (PowerShell):</p>
+  <ol class="check" data-list="pc-cikis">
+    <li><label><input type="checkbox"><span>PC'de çalışan Claude oturumunu bitir (işi yarımsa Claude'a "şu ana kadarkini commit et" de).</span></label></li>
+    <li><label><input type="checkbox"><span><code>git status</code> → değişiklik var mı bak.</span></label></li>
+    <li><label><input type="checkbox"><span><code>git add -A</code> ve <code>git commit -m "ne yaptım"</code></span></label></li>
+    <li><label><input type="checkbox"><span><code>git push</code> → hata vermediğini gör.</span></label></li>
+    <li><label><input type="checkbox"><span>Hangi <b>dal</b>dasın, not al: <code>git branch --show-current</code></span></label></li>
+  </ol>
+  <p><b>Telefonda, başlarken</b> (Kumanda):</p>
+  <ol class="check" data-list="tel-giris">
+    <li><label><input type="checkbox"><span>Termux'ta <code>kumanda</code> çalışıyor mu? (Kapalıysa yaz.)</span></label></li>
+    <li><label><input type="checkbox"><span>Projeler → proje telefonda <b>yoksa</b>: GitHub → Depoları getir → <b>Klonla</b>.</span></label></li>
+    <li><label><input type="checkbox"><span>Proje <b>varsa</b>: <b>Pull</b>. "↓" işareti kalmamalı, kartta <b>temiz</b> yazmalı.</span></label></li>
+    <li><label><input type="checkbox"><span>Dal PC'dekiyle aynı mı? (kartta ⎇ yanında yazar; değilse terminalde <code>git switch dal-adı</code>)</span></label></li>
+    <li><label><input type="checkbox"><span><b>Claude</b> düğmesi → çalışmaya başla.</span></label></li>
+  </ol>
+
+  <h2 id="donus">Telefondan bilgisayara dönerken</h2>
+  <ol class="check" data-list="tel-cikis">
+    <li><label><input type="checkbox"><span>Claude'un işi bitti mi? (Bitmediyse <b>Esc</b> ile durdur.)</span></label></li>
+    <li><label><input type="checkbox"><span>Projeler → <b>Fark</b> ile ne değiştiğine bak.</span></label></li>
+    <li><label><input type="checkbox"><span><b>Commit</b> → kısa bir mesaj yaz.</span></label></li>
+    <li><label><input type="checkbox"><span><b>Push</b> → çıktıda hata olmadığını gör; kartta "↑" kalmamalı.</span></label></li>
+    <li><label><input type="checkbox"><span>PC'de ilk iş: projede <code>git pull</code>.</span></label></li>
+  </ol>
+  <button class="btn reset" data-reset="pc-cikis,tel-giris,tel-cikis">Geçiş listelerini sıfırla</button>
+
+  <h2 id="her-gun">Her oturumda</h2>
+  <ol class="check" data-list="her-gun">
+    <li><label><input type="checkbox"><span>Şarj %30'un üstünde ya da şarjda. (Claude + Ubuntu pil yer.)</span></label></li>
+    <li><label><input type="checkbox"><span>Termux bildirimi duruyor (kaydırıp kapatma, "Exit"e basma).</span></label></li>
+    <li><label><input type="checkbox"><span>Mobil veride büyük <code>npm install</code> yapmadan önce bir düşün.</span></label></li>
+    <li><label><input type="checkbox"><span>Ayda bir: <code>kumanda-guncelle</code></span></label></li>
+  </ol>
+  <button class="btn reset" data-reset="her-gun">Sıfırla</button>
+
+  <h2 id="kurallar">Altın kurallar (hata yapmamak için)</h2>
+  <ol>
+    <li><b>Projeleri <code>~/projeler</code>'e klonla, telefon hafızasına (<code>~/storage/shared</code>) değil.</b> Android orada dosya çalıştırmaya ve kısayol (symlink) oluşturmaya izin vermez; <code>npm install</code> ve git bozulur. Telefon hafızası sadece dosya alıp vermek için: indirilenlerden bir dosyayı projeye <b>kopyala</b>.</li>
+    <li><b>Önce pull, sonra iş, sonra push.</b> İki cihazda aynı anda düzenleme yapma.</li>
+    <li><b>Claude izin sorduğunda oku.</b> <code>rm -rf</code>, <code>git push --force</code>, <code>git reset --hard</code> görürsen ne yaptığını anlamadan onaylama.</li>
+    <li><b>Doğrudan main'e değil, dala çalış</b> önemli projelerde: <code>git switch -c deneme</code>. Bozulursa main sağlam kalır.</li>
+    <li><b>Erişim anahtarını kimseyle paylaşma</b>, ekran görüntüsünde görünmesin.</li>
+    <li><b>Termux'u Play Store'dan güncelleme</b>; kurduğun yerden (F-Droid/GitHub) güncelle.</li>
+    <li>Bir şey ters giderse paniğe gerek yok: push edilmiş her şey GitHub'da güvende. Telefondaki kopyayı silip yeniden klonlayabilirsin.</li>
+  </ol>
+
+  <h2 id="claude">Claude Code ipuçları (telefonda)</h2>
+  <div class="tbl"><table>
+    <tr><th>Ne</th><th>Nasıl</th></tr>
+    <tr><td>Kaldığın konuşmaya dön</td><td><code>claude -c</code> (hızlı komut: "claude -c")</td></tr>
+    <tr><td>Claude'u durdur</td><td>Tuş çubuğunda <b>Esc</b></td></tr>
+    <tr><td>Mod değiştir (plan / otomatik kabul)</td><td>Tuş çubuğunda <b>⇧Tab</b></td></tr>
+    <tr><td>Çıkış</td><td><code>/exit</code> ya da <b>^C</b> iki kez</td></tr>
+    <tr><td>Konuşmayı sıfırla</td><td><code>/clear</code></td></tr>
+    <tr><td>Uzun mesaj yazmak</td><td>Ayarlar → <b>Satır modu</b>: önce normal kutuda yaz, sonra gönder</td></tr>
+    <tr><td>Çıktıyı kopyalamak</td><td>Tuş çubuğunda <b>Metin</b></td></tr>
+  </table></div>
+  <div class="note">Kurulumla uğraşamayacağın bir anda: Claude uygulamasındaki <b>Code</b> bölümü (claude.ai/code) GitHub projelerinde bulutta çalışır. Telefonda hiçbir şey kurmak gerekmez ama telefonun kendi dosyalarını göremez.</div>
+
+  <h2 id="komutlar">PowerShell → Termux karşılıkları</h2>
+  <div class="tbl"><table>
+    <tr><th>PowerShell</th><th>Termux (bash)</th><th>Ne yapar</th></tr>
+    <tr><td><code>dir</code> / <code>ls</code></td><td><code>ls -la</code></td><td>Klasörü listele</td></tr>
+    <tr><td><code>cd klasor</code></td><td><code>cd klasor</code></td><td>Klasöre gir (<code>cd ~</code> eve döner)</td></tr>
+    <tr><td><code>pwd</code></td><td><code>pwd</code></td><td>Neredeyim</td></tr>
+    <tr><td><code>Get-Content a.txt</code></td><td><code>cat a.txt</code></td><td>Dosyayı göster</td></tr>
+    <tr><td><code>mkdir x</code></td><td><code>mkdir -p x</code></td><td>Klasör oluştur</td></tr>
+    <tr><td><code>Copy-Item a b</code></td><td><code>cp a b</code> (klasör: <code>cp -r</code>)</td><td>Kopyala</td></tr>
+    <tr><td><code>Move-Item a b</code></td><td><code>mv a b</code></td><td>Taşı / yeniden adlandır</td></tr>
+    <tr><td><code>Remove-Item x</code></td><td><code>rm x</code> (klasör: <code>rm -r</code>)</td><td>Sil — geri dönüşüm kutusu yok!</td></tr>
+    <tr><td><code>cls</code></td><td><code>clear</code> ya da <b>^L</b></td><td>Ekranı temizle</td></tr>
+    <tr><td><code>notepad a.txt</code></td><td><code>nano a.txt</code> ya da Dosyalar sekmesi</td><td>Düzenle</td></tr>
+    <tr><td>Ctrl+C</td><td><b>^C</b></td><td>Çalışan komutu durdur</td></tr>
+    <tr><td>—</td><td><code>cp ~/storage/downloads/x.png .</code></td><td>İndirilenlerden projeye dosya al</td></tr>
+  </table></div>
+
+  <h2 id="sorun">Sorun giderme</h2>
+  <div class="tbl"><table>
+    <tr><th>Belirti</th><th>Çözüm</th></tr>
+    <tr><td>Kumanda açılmıyor / bağlanamıyor</td><td>Termux'a dön, <code>kumanda</code> çalışıyor mu bak. Kapalıysa yeniden yaz.</td></tr>
+    <tr><td>Ekran kapanınca her şey durdu</td><td>Termux pil ayarı → Kısıtlamasız. Bildirimde "Acquire wakelock".</td></tr>
+    <tr><td>"Process completed (signal 9)"</td><td>Android 14+: geliştirici seçeneklerinde alt süreç kısıtlamasını kapat (kurulum adımı 7).</td></tr>
+    <tr><td><code>claude: command not found</code></td><td>Kurulum komutunu tekrar çalıştır.</td></tr>
+    <tr><td>Claude giriş istiyor</td><td>Termux'ta <code>claude</code> yaz, bağlantıyla yeniden giriş yap.</td></tr>
+    <tr><td>Push: "rejected / non-fast-forward"</td><td>Önce <b>Pull</b>. Çakışma çıkarsa Claude'a "çakışmayı çöz" de. <b>Asla</b> <code>--force</code> kullanma.</td></tr>
+    <tr><td>Push: kimlik doğrulama hatası</td><td>Termux'ta <code>gh auth login</code>, sonra kurulum komutunu tekrar çalıştır.</td></tr>
+    <tr><td><code>npm install</code>: EACCES / symlink hatası</td><td>Proje telefon hafızasında. <code>~/projeler</code>'e taşı.</td></tr>
+    <tr><td>Erişim anahtarını kaybettim</td><td>Termux'ta <code>kumanda</code> her açılışta anahtarlı adresi yazdırır.</td></tr>
+  </table></div>
+  <p class="muted" style="margin-top:24px">Kontrol işaretlerin bu telefonda saklanır.</p>
+</div>
+<script>
+  const KEY = 'kumanda.rehber';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch {} };
+  document.querySelectorAll('ol.check').forEach((ol) => {
+    const name = ol.dataset.list;
+    ol.querySelectorAll('input').forEach((box, i) => {
+      box.checked = !!saved[name + i];
+      box.addEventListener('change', () => { saved[name + i] = box.checked; persist(); });
+    });
+  });
+  document.querySelectorAll('[data-reset]').forEach((b) => b.addEventListener('click', () => {
+    for (const name of b.dataset.reset.split(',')) {
+      document.querySelectorAll(`ol[data-list="${name}"] input`).forEach((box, i) => { box.checked = false; delete saved[name + i]; });
+    }
+    persist();
+  }));
+</script>
+</body>
+</html>

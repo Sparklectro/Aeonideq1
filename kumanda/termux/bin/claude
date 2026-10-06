@@ -1,0 +1,6 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Claude Code'u Ubuntu (proot) içinde, ŞU AN BULUNDUĞUN klasörde başlatır.
+# Termux'taki dosyalar Ubuntu içinden aynı yollarla görünür; yani ~/projeler/... ortaktır.
+exec proot-distro login ubuntu --shared-tmp --work-dir "$PWD" \
+  --env TERM="${TERM:-xterm-256color}" --env COLORTERM=truecolor \
+  -- /root/.local/bin/claude "$@"

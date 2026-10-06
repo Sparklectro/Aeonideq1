@@ -3,17 +3,22 @@ import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-let pty = null;
-try {
-  pty = require('@lydell/node-pty');
-} catch {
-  // Yerel PTY modülü yoksa (ör. Termux) aşağıdaki yedek yönteme düşülür.
-}
 
 const SCROLLBACK_LIMIT = 256 * 1024; // yeniden bağlanınca gönderilecek geçmiş
 const isWin = process.platform === 'win32';
+export const isTermux = Boolean(process.env.PREFIX?.includes('com.termux')) || process.platform === 'android';
+// node-pty'nin Android için derlenmiş sürümü yok; Termux'ta doğrudan Python köprüsü kullanılır.
+let pty = null;
+if (!isTermux) {
+  try {
+    pty = require('@lydell/node-pty');
+  } catch {}
+}
+const HELPER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'pty-helper.py');
 
 function onPath(cmd) {
   try {
@@ -26,10 +31,14 @@ function onPath(cmd) {
 
 export function defaultShell() {
   if (isWin) return onPath('pwsh.exe') ? 'pwsh.exe' : 'powershell.exe';
+  if (isTermux && process.env.PREFIX) return path.join(process.env.PREFIX, 'bin', 'bash');
   return process.env.SHELL || (fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh');
 }
 
-export const ptyMode = pty ? 'pty' : !isWin && onPath('script') ? 'script' : 'pipe';
+const python = isWin ? null : ['python3', 'python'].find(onPath);
+
+// Öncelik: node-pty → Python PTY köprüsü (boyut değişimini destekler) → script → düz borular.
+export const ptyMode = pty ? 'pty' : python ? 'python' : !isWin && onPath('script') ? 'script' : 'pipe';
 
 export class SessionManager {
   constructor({ shell, workspace }) {
@@ -91,11 +100,21 @@ class Session {
       this.proc.onData((d) => this.emit(d));
       this.proc.onExit(({ exitCode }) => this.exited(exitCode));
     } else {
-      // Yedek: Unix'te `script` gerçek bir PTY sağlar; o da yoksa düz borular.
-      const child =
-        ptyMode === 'script'
-          ? spawn('script', ['-qfc', shell, '/dev/null'], { cwd, detached: true, env: { ...env, COLUMNS: String(cols), LINES: String(rows) } })
-          : spawn(shell, isWin ? [] : ['-i'], { cwd, detached: !isWin, env });
+      let child;
+      if (ptyMode === 'python') {
+        child = spawn(python, [HELPER, String(cols), String(rows), shell, '-l'], {
+          cwd,
+          detached: true,
+          env,
+          stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+        });
+        this.ctl = child.stdio[3];
+        this.ctl.on('error', () => {});
+      } else if (ptyMode === 'script') {
+        child = spawn('script', ['-qfc', shell, '/dev/null'], { cwd, detached: true, env: { ...env, COLUMNS: String(cols), LINES: String(rows) } });
+      } else {
+        child = spawn(shell, isWin ? [] : ['-i'], { cwd, detached: !isWin, env });
+      }
       child.stdout.on('data', (d) => this.emit(d.toString('utf8')));
       child.stderr.on('data', (d) => this.emit(d.toString('utf8')));
       child.on('exit', (code) => this.exited(code ?? 0));
@@ -142,11 +161,11 @@ class Session {
     rows = Math.max(4, Math.min(300, rows | 0));
     this.cols = cols;
     this.rows = rows;
-    if (pty && this.exitCode === null) {
-      try {
-        this.proc.resize(cols, rows);
-      } catch {}
-    }
+    if (this.exitCode !== null) return;
+    try {
+      if (pty) this.proc.resize(cols, rows);
+      else this.ctl?.write(`${cols} ${rows}\n`);
+    } catch {}
   }
 
   kill() {
@@ -174,4 +193,21 @@ export const platformInfo = () => ({
   home: os.homedir(),
   sep: isWin ? '\\' : '/',
   ptyMode,
+  termux: isTermux,
+  places: places(),
 });
+
+// Dosyalar sekmesindeki kısayollar. Termux'ta telefonun paylaşılan hafızası ~/storage altındadır.
+function places() {
+  const home = os.homedir();
+  const list = [['Ev', home]];
+  const candidates = isTermux
+    ? [
+        ['Telefon hafızası', path.join(home, 'storage', 'shared')],
+        ['İndirilenler', path.join(home, 'storage', 'downloads')],
+        ['Kamera', path.join(home, 'storage', 'dcim')],
+      ]
+    : [['Masaüstü', path.join(home, 'Desktop')], ['İndirilenler', path.join(home, 'Downloads')]];
+  for (const [name, p] of candidates) if (fs.existsSync(p)) list.push([name, p]);
+  return list;
+}

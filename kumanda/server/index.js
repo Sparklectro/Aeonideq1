@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { WebSocketServer } from 'ws';
 import { loadConfig, safeEqual, updateSavedConfig } from './config.js';
-import { SessionManager, platformInfo, ptyMode } from './sessions.js';
+import { execFile } from 'node:child_process';
+import { SessionManager, platformInfo, ptyMode, isTermux } from './sessions.js';
 import * as fsApi from './fs-api.js';
 import * as gitApi from './git-api.js';
 
@@ -228,18 +229,23 @@ if (isMain) {
   const cfg = loadConfig();
   const server = createServer(cfg);
   server.listen(cfg.port, cfg.host, () => {
-    const hosts = cfg.host === '0.0.0.0' ? ['localhost', ...lanAddresses()] : [cfg.host];
+    const hosts = cfg.host === '0.0.0.0' ? ['localhost', ...lanAddresses()] : [cfg.host === '127.0.0.1' ? 'localhost' : cfg.host];
     const urls = hosts.map((h) => `http://${h}:${cfg.port}/#token=${cfg.token}`);
     console.log('\n  Kumanda çalışıyor');
     console.log(`  Kabuk     : ${server.sessions.shell} (${ptyMode})`);
     console.log(`  Projeler  : ${cfg.workspace}\n`);
     for (const u of urls) console.log(`  ${u}`);
     const phoneUrl = urls[1] || urls[0];
-    try {
+    if (!isTermux) try {
       console.log('\n  Telefonla okut:');
       require('qrcode-terminal').generate(phoneUrl, { small: true }, (q) => console.log(q.replace(/^/gm, '  ')));
     } catch {}
-    if (ptyMode !== 'pty') {
+    if (isTermux && !process.env.KUMANDA_NO_OPEN) {
+      // Telefonda: Chrome'u doğrudan anahtarlı adresle aç.
+      execFile('termux-open-url', [urls[0].replace('localhost', '127.0.0.1')], () => {});
+      console.log('\n  Tarayıcı açılıyor. Bu Termux penceresini KAPATMA; arka planda açık kalsın.');
+    }
+    if (ptyMode !== 'pty' && ptyMode !== 'python') {
       console.log(`  Uyarı: node-pty yüklenemedi, "${ptyMode}" yedek modu kullanılıyor.`);
     }
   });

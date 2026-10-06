@@ -1,0 +1,6 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Kumanda panelini başlatır ve Chrome'da açar. Durdurmak için bu pencerede Ctrl+C.
+APP="$HOME/.kumanda-uygulama/kumanda"
+[ -d "$APP" ] || { echo "Kumanda kurulu değil. Önce kurulum komutunu çalıştır."; exit 1; }
+termux-wake-lock 2>/dev/null || true   # ekran kapanınca Android uygulamayı uyutmasın
+cd "$APP" && exec node server/index.js

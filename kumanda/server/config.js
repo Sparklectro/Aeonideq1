@@ -3,6 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+const isTermux = Boolean(process.env.PREFIX?.includes('com.termux')) || process.platform === 'android';
+
 export const CONFIG_DIR = process.env.KUMANDA_HOME || path.join(os.homedir(), '.kumanda');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
@@ -20,14 +22,15 @@ export function loadConfig() {
     changed = true;
   }
   if (!saved.workspace) {
-    saved.workspace = path.join(os.homedir(), 'kumanda-projeler');
+    saved.workspace = path.join(os.homedir(), isTermux ? 'projeler' : 'kumanda-projeler');
     changed = true;
   }
   if (changed) saveConfig(saved);
 
   const cfg = {
     token: process.env.KUMANDA_TOKEN || saved.token,
-    host: process.env.KUMANDA_HOST || saved.host || '0.0.0.0',
+    // Telefonda sunucu yalnızca telefonun kendisine açılır; dışarıdan kimse bağlanamaz.
+    host: process.env.KUMANDA_HOST || saved.host || (isTermux ? '127.0.0.1' : '0.0.0.0'),
     port: Number(process.env.KUMANDA_PORT || saved.port || 7681),
     workspace: path.resolve(expandHome(process.env.KUMANDA_WORKSPACE || saved.workspace)),
     shell: process.env.KUMANDA_SHELL || saved.shell || null,

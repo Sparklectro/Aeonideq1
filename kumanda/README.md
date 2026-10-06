@@ -1,7 +1,36 @@
 # 📱 Kumanda
 
-Telefondan bilgisayarına tam hakimiyet. Bilgisayarda küçük bir sunucu çalışır; telefon
-tarayıcıdan (ya da ana ekrana eklenmiş uygulama olarak) ona bağlanır ve şunları yaparsın:
+Android telefonda, bilgisayardaki PowerShell + Claude Code düzenini kurar. **Her şey telefonun
+içinde çalışır**: bilgisayar gerekmez, internete ya da bilgisayara hiçbir port açılmaz.
+
+## Android (önerilen) — tek komutla kurulum
+
+1. **Termux**'u [F-Droid](https://f-droid.org/packages/com.termux/) ya da
+   [GitHub](https://github.com/termux/termux-app/releases)'dan kur (Play Store'dan değil).
+2. Termux'u aç, şunu yapıştır:
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/Sparklectro/Aeonideq1/ccr-0958c9ab-0uudov/kumanda/termux/kurulum.sh | bash
+   ```
+3. Bitince `claude` yaz (bir kez giriş), sonra `kumanda` yaz → Chrome açılır →
+   **⋮ → Ana ekrana ekle**.
+
+Kurulum şunları yapar: Termux paketleri (node, git, gh, python), telefon hafızası izni,
+GitHub girişi, Kumanda paneli, Claude Code için Ubuntu ortamı (proot-distro; resmi Claude
+Code Android'de doğrudan çalışmaz) ve resmi kurucuyla Claude Code. Tekrar çalıştırmak
+güvenlidir.
+
+| Komut (Termux) | Ne yapar |
+|---|---|
+| `kumanda` | Paneli başlatır, Chrome'da açar (yalnızca `127.0.0.1`) |
+| `claude` | Bulunduğun klasörde Claude Code (Ubuntu içinde) |
+| `kumanda-guncelle` | Kumanda'yı ve Claude Code'u günceller |
+
+Adım adım kontrol listeleri, bilgisayar ↔ telefon geçişi, altın kurallar ve sorun giderme
+uygulamanın içinde: sağ üstteki **?** düğmesi ([`client/rehber.html`](client/rehber.html)).
+
+## Bilgisayar sunucusu (isteğe bağlı)
+
+Aynı panel bilgisayarda da çalışır; o zaman telefondan bilgisayarı yönetirsin:
 
 - **Gerçek terminal** — Windows'ta PowerShell, Linux/macOS'ta bash/zsh. PC'deki konsolda ne
   yazabiliyorsan telefonda da yazarsın: `claude`, `git`, `npm`, `python`…
@@ -106,19 +135,6 @@ Anahtarı yenilemek için `config.json` içindeki `token` satırını silip sunu
 
 `Win + R` → `shell:startup` → açılan klasöre `baslat.cmd` için bir kısayol koy.
 
-## Sunucuyu telefonda çalıştırmak (Android / Termux)
-
-Bilgisayar olmadan telefonun kendisini de yönetebilirsin:
-
-```sh
-pkg install nodejs git util-linux
-git clone https://github.com/Sparklectro/Aeonideq1.git && cd Aeonideq1/kumanda
-npm install        # node-pty derlenemezse sorun değil, "script" yedek moduna geçer
-./baslat.sh
-```
-
-Sonra telefonun tarayıcısında `http://localhost:7681/#token=…` adresini aç.
-
 ## Güvenlik
 
 - Erişim anahtarı = bilgisayarın üzerinde tam yetki. Kimseyle paylaşma.
@@ -132,11 +148,12 @@ Sonra telefonun tarayıcısında `http://localhost:7681/#token=…` adresini aç
 npm test           # sunucu, terminal, dosya ve git testleri
 ```
 
-- `server/` — Node.js: HTTP + WebSocket, PTY oturumları (`@lydell/node-pty`, hazır derlenmiş;
-  yoksa `script`/boru yedeği), dosya ve git API'leri.
+- `server/` — Node.js: HTTP + WebSocket, PTY oturumları (`@lydell/node-pty`; Android'de
+  `pty-helper.py` Python köprüsü), dosya ve git API'leri.
+- `termux/` — Android kurulum betiği ve `kumanda` / `claude` / `kumanda-guncelle` komutları.
 - `client/` — derleme adımı olmayan PWA: xterm.js terminal, mobil tuş çubuğu, projeler,
   dosya editörü, önizleme.
 
-Sıradaki adımlar için fikirler: Capacitor ile Play Store'a konabilen yerel Android paketi,
+Sıradaki adımlar için fikirler:
 sözdizimi renklendirmeli editör (CodeMirror), bildirim (uzun süren komut / Claude bitti),
 birden çok bilgisayarı tek uygulamadan yönetme.

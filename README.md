@@ -5,15 +5,13 @@ Bu dal (`master`) eski kişisel projeleri barındırır. Şirket projeleri
 
 ## 📱 Kumanda
 
-Telefondan bilgisayara tam hakimiyet: gerçek PowerShell/bash terminali (Claude Code dahil),
-GitHub projelerini listeleme/klonlama/commit/push, dosya düzenleme ve geliştirme sunucusu
-önizlemesi. Bilgisayarda küçük bir Node.js sunucusu, telefonda ana ekrana eklenebilen bir
-web uygulaması (PWA). Ayrıntılar: [`kumanda/README.md`](kumanda/README.md).
+Android telefonda PowerShell + Claude Code düzeni: Termux içinde gerçek terminal, Claude Code,
+GitHub projelerini klonlama/commit/push, telefonun dosyalarına erişim ve düzenleme. Her şey
+telefonun içinde çalışır. Ayrıntılar: [`kumanda/README.md`](kumanda/README.md).
 
-```bash
-cd kumanda
-npm install
-npm start                            # QR kodu telefonla okut
+```sh
+# Termux'ta:
+curl -fsSL https://raw.githubusercontent.com/Sparklectro/Aeonideq1/ccr-0958c9ab-0uudov/kumanda/termux/kurulum.sh | bash
 ```
 
 ## 🐦 Civilti (eski kurs projesi)

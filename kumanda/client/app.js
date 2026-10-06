@@ -135,6 +135,7 @@ async function start() {
   $('#host-name').textContent = `${state.info.user}@${state.info.hostname}`;
   if (!state.cwd) state.cwd = state.info.workspace;
   renderKeybar();
+  renderPlaces();
   layout();
   await syncSessions();
 }
@@ -286,6 +287,13 @@ function renderTabs() {
 }
 
 async function newSession(opts = {}) {
+  if (state.info?.termux && /\/storage\/|\/sdcard/.test(opts.cwd || '')) {
+    const ok = confirm(
+      'Dikkat: bu klasör telefon hafızasında.\n\nAndroid burada program çalıştırmaya ve symlink oluşturmaya izin vermez; ' +
+        'git, npm install ve Claude düzgün çalışmayabilir.\n\nProjeleri ~/projeler içinde tut. Yine de devam edilsin mi?'
+    );
+    if (!ok) return;
+  }
   const s = state.sessions.get(state.active);
   const cols = s?.term.cols || 80;
   const rows = s?.term.rows || 24;
@@ -309,6 +317,7 @@ $('#new-session').addEventListener('click', () => newSession().catch((e) => toas
 const KEYS = [
   ['Esc', '\x1b'],
   ['Tab', '\t'],
+  ['⇧Tab', '\x1b[Z'], // Claude Code'da mod değiştirir
   ['Ctrl', 'ctrl'],
   ['Alt', 'alt'],
   ['↑', '\x1b[A'],
@@ -642,6 +651,11 @@ async function loadDir(dir) {
   } catch (e) {
     toast(e.message, true);
   }
+}
+
+function renderPlaces() {
+  const places = [['Projeler', state.info.workspace], ...(state.info.places || [])];
+  $('#fs-places').replaceChildren(...places.map(([name, p]) => el('button', { class: 'btn', onclick: () => loadDir(p) }, name)));
 }
 
 async function fileMenu(full, it) {
