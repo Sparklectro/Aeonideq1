@@ -1,12 +1,12 @@
-# Aeonideq1
+# Aeonideq
 
-Kişisel projeler deposu.
+Aeonideq şirket projeleri. Bu dal (`Aeonideq`) şirket işlerini barındırır; `master` dalında
+yalnızca eski kişisel projeler durur.
 
-| Klasör | Ne işe yarar |
-| --- | --- |
-| [`muzik-tanima/`](muzik-tanima/) | 🎵 Videodaki arka plan müziğini/şarkıyı tanıyan araç (CLI + web arayüzü) |
-| [`.claude/skills/video-muzik-tanima/`](.claude/skills/video-muzik-tanima/) | Aynı aracın Claude skill'i |
-| [`civilti/`](civilti/) | 🐦 Django ile yazılmış Twitter benzeri mikroblog uygulaması |
+| Proje | Klasör | Açıklama |
+| --- | --- | --- |
+| 🎵 Video Müzik Tanıma | [`muzik-tanima/`](muzik-tanima/) | Videodaki arka plan müziğini/şarkıyı tanıyan araç (CLI + web arayüzü) |
+| 🤖 Claude skill'i | [`.claude/skills/video-muzik-tanima/`](.claude/skills/video-muzik-tanima/) | Aynı aracın Claude skill'i |
 
 ---
 
@@ -43,22 +43,8 @@ Nasıl çalıştığı, seçenekler ve sınırlar için: [`muzik-tanima/README.m
 
 ### Claude skill'i
 
-- **Claude Code:** bu depoda çalışırken skill otomatik yüklenir. "Bu videodaki şarkı ne?" demeniz yeterli.
+- **Claude Code:** bu dalda çalışırken skill otomatik yüklenir. "Bu videodaki şarkı ne?" demeniz yeterli.
 - **claude.ai:** [`muzik-tanima/dist/video-muzik-tanima.skill`](muzik-tanima/dist/video-muzik-tanima.skill)
   dosyasını *Ayarlar → Yetenekler* bölümünden yükleyin.
 - Bulut oturumunda çalıştırmak için ortamın ağ ayarında `amp.shazam.com` (ve isteğe bağlı
   `musicbrainz.org`) izinli olmalı.
-
----
-
-## 🐦 Civilti
-
-Django ile yazılmış basit bir mikroblog uygulaması: kayıt olma / giriş, tweet akışı, profil,
-kullanıcı takip etme, takipçi ve takip edilen listeleri.
-
-```bash
-cd civilti
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver           # http://127.0.0.1:8000
-```
