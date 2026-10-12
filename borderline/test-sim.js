@@ -157,4 +157,36 @@ facId = 'urban'; sandboxMode = false; newGame('normal', 'delta'); FAC[1] = 'sky'
   let err = 'ok'; try { for (let i = 0; i < 60*40 && !G.over; i++) update(1/60); } catch (e) { err = e.message; }
   const hq1 = G.ents.find(e => e.team===1 && e.type==='hq'); if (hq1) kill(hq1); for (let i = 0; i < 60*3; i++) update(1/60);
   console.log('save', kb + 'KB | resumed identical', same, '| broken links', broken, '| 40s after resume', err, '| save cleared at game end', !('save' in store)); }
+
+// UPDATE SAFETY. Every file in ./saves is a real save written by an older build: each must still load and play.
+// Never delete these files. When SAVE_V goes up, add a new fixture written by the build just before the change.
+{ const store = {}; localStorage.getItem = k => k in store ? store[k] : null; localStorage.setItem = (k,v) => { store[k] = String(v); }; localStorage.removeItem = k => { delete store[k]; };
+  const dir = __dirname + '/saves', out = [];
+  for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort()) {
+    store.save = fs.readFileSync(dir + '/' + f, 'utf8'); const d = loadSave(); let r = 'NO SAVE';
+    if (d) { try { resumeGame(d); for (let i = 0; i < 60*30 && !G.over; i++) update(1/60); r = 'ok ' + Math.floor(G.t) + 's'; } catch (e) { r = 'CRASH ' + e.message; } }
+    out.push(f + ' ' + r); }
+  console.log('old saves still play:', out.join(', '));
+
+  // content changed by an update: unknown unit/upgrade/queue entries, missing fields, a balance patch
+  const base = fs.readFileSync(dir + '/save-v1.json', 'utf8'), d = JSON.parse(base);
+  const u0 = d.G.ents.find(e => e.kind==='unit' && e.team===0 && e.type==='soldier');
+  d.G.ents.push({ id: 99999, kind: 'unit', type: 'zeppelin', team: 1, x: 500, y: 500, hp: 10, max: 10 }); u0.target = { $e: 99999 };
+  d.G.up[0].laser = 2; d.G.up[0].infArm = 9;
+  const hq = d.G.ents.find(e => e.kind==='bld' && e.team===0 && e.type==='hq'); hq.queue.push({ type: 'mech', t: 0, c: 100 });
+  d.G.ents.forEach(e => { if (e.kind==='unit') { delete e.still; delete e.gt; } }); delete d.G.groups;
+  const cr0 = d.G.credits[0]; store.save = JSON.stringify(d); UNIT.soldier.hp += 20;
+  let ok = true; try { resumeGame(loadSave()); for (let i = 0; i < 60*20 && !G.over; i++) update(1/60); } catch (e) { ok = 'CRASH ' + e.message; }
+  const sol = G.ents.find(e => e.type==='soldier' && e.team===0);
+  console.log('tolerant load:', ok === true ? 'ok' : ok, '| unknown unit dropped', !G.ents.some(e => e.type==='zeppelin'),
+    '| unknown upgrade dropped', !('laser' in G.up[0]), '| level capped', G.up[0].infArm, '| unknown queue refunded', Math.round(G.credits[0]) >= Math.round(cr0) ? 'yes' : 'no',
+    '| missing fields filled', G.ents.every(e => e.kind!=='unit' || ('still' in e && 'gt' in e)) && Array.isArray(G.groups), '| balance patch applied', sol ? sol.max === unitMaxHp(0,'soldier') : 'n/a');
+  UNIT.soldier.hp -= 20;
+
+  // migration chain, a save from a newer build, and a broken save
+  const m = JSON.parse(base); m.v = 0; MIGRATE[0] = x => { x.migrated = true; return x; }; store.save = JSON.stringify(m); const dm = loadSave(); delete MIGRATE[0];
+  const n = JSON.parse(base); n.v = SAVE_V + 1; store.save = JSON.stringify(n); const newer = loadSave() === null && 'save' in store;
+  const bad = JSON.parse(base); bad.G.ents = 'garbage'; store.save = JSON.stringify(bad);
+  const ce = console.error; console.error = () => {}; try { resumeGame(loadSave()); } catch (e) { quarantineSave(e); } console.error = ce;
+  console.log('migration v0->v1 ran', !!(dm && dm.migrated && dm.v === SAVE_V), '| newer-build save ignored and kept', newer, '| broken save set aside', 'save.bad' in store && !('save' in store) && G === null); }
 `);

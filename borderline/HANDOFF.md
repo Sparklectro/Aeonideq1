@@ -10,7 +10,7 @@ A single-file, touch-first RTS that runs in any mobile browser. This document is
 
 - **Game (source of truth for a cloud/phone session):** the private artifact https://claude.ai/artifact/JQeTJgGfE7Es5cRPZPQDMS — the whole game is that one HTML page. Read it with the Artifact tool (`action: "read"`, then Read the saved file in full), edit that copy, and publish back to the **same URL** so the owner's phone link keeps working. The saved page has a publisher wrapper around the game: one extra first line (`<!doctype html><html><head>…<body>`) and a final `</body></html>`. Strip both to get the real `border-line-rts.html` (it starts with its own `<!doctype html>`), and publish that.
 - **PC copy:** `D:\Stattic\border-line\` on the owner's Windows machine (`border-line-rts.html`, `HANDOFF.md`, `test-sim.js`, `clash.js`, `balance.js`, `console.js`, `seed.js`). A cloud session cannot reach it. If you change the game from the cloud, say so at the end, so the owner can pull the artifact back onto the PC later.
-- **This handoff + the Node tools** are published together as the "Border Line Handoff" artifact, https://claude.ai/artifact/XKNng7qcAmhELD9h7ed3x1 ; the tools are its supporting files (`HANDOFF.md`, `test-sim.js`, `clash.js`, `balance.js`, `console.js`, `seed.js`). Put them in one folder next to `border-line-rts.html`.
+- **This handoff + the Node tools** are published together as the "Border Line Handoff" artifact, https://claude.ai/artifact/XKNng7qcAmhELD9h7ed3x1 ; the tools are its supporting files (`HANDOFF.md`, `test-sim.js`, `clash.js`, `balance.js`, `console.js`, `seed.js`, and the save fixtures `saves/*.json`). Put them in one folder next to `border-line-rts.html`, with the fixtures in a `saves/` subfolder.
 
 **The owner's standing rules**
 
@@ -22,6 +22,7 @@ A single-file, touch-first RTS that runs in any mobile browser. This document is
 - Ask first before: adding a dependency or build step, splitting the file, changing the data model shape, or anything that affects save-game compatibility.
 - The owner tests on a phone through the artifact and gives feedback in plain language (sometimes Turkish; replies in English). They are not reading the code. Publish to the same game link after every change.
 - The dev console must never appear in a normal match: only in *Battle with console* and *Sandbox*.
+- **Save compatibility is critical (owner's words: "very important").** An update must never cost a player their match. Follow *Save compatibility* below for every change, and tell the owner whenever a change touches it.
 - Android packaging: the owner wants every step explained as it is reached (Capacitor setup, Android Studio, app ID, signing key, API 36, icon/splash, AAB, Play Console, closed testing 12 testers × 14 days, Data Safety, privacy policy page on e.g. GitHub Pages). Not started; the game is not finished.
 
 **Done so far**
@@ -92,7 +93,7 @@ One HTML file with three parts: `<style>` (the first `<style>` block is the embe
 | Panel UI | `btn`, `panelKey`, `renderPanel`, `livePanel`, `grpBtns`, panel click handler |
 | Menus/flow | `endGame`, `setPause`, `renderFacs`, `renderMaps`, `thumb`, start/pause/end wiring |
 | Sound | `SND` (sounds as stacks of voices), `audioInit` (context, noise buffers, reverb, wind bed), `sndVoice`, `sfx(kind,x,y,pitch,length)`, `setMute`; counters in `sfxN` |
-| Persistence | `loadKey`/`saveKey` (localStorage: last map, difficulty, faction, best times, mute); match save: `saveGame`, `loadSave`, `resumeGame`, `clearSave`, `renderResume` |
+| Persistence | `loadKey`/`saveKey`/`dropKey` (localStorage + native Preferences mirror: last map, difficulty, faction, best times, mute), `restorePrefs`; match save: `saveGame`, `loadSave`, `MIGRATE`, `resumeGame`, `quarantineSave`, `clearSave`, `renderResume` |
 | Modes / console gate / Back | `startMode`, `devAllowed`, `devShowBtn`, `onBack`, `backArm` |
 
 ---
@@ -142,7 +143,27 @@ Start screen: **Start battle** (normal match, no console), **Battle with console
 
 ## Save / resume
 
-The match is written to localStorage key `save` every 10 s of play, whenever the page is hidden (`visibilitychange`, `pagehide`, Capacitor `pause`) and when leaving to the menu; it is deleted when the match ends or a new battle starts. On launch, if a save exists, a **Resume match** button sits at the top of the start screen (map · time · faction · mode). `saveGame()` serializes `G` with a JSON replacer: entity links anywhere (orders, targets, shells, `G.sel`, `G.selBld`, `relic.home.live`) become `{$e:id}`, relic homes `{$h:index}`, fog grids base64 `{$u8}`; `resumeGame()` rebuilds them, drops orders whose target died, then rebuilds nav and the fog canvas. Also saved: map, difficulty, both factions, mode, camera. A mid-match save is ~75 KB. **Compatibility:** `SAVE_V` is checked on load; bump it whenever entity fields or `G` change shape, and old saves are ignored instead of breaking. The data model itself did not change (only `G.dev` was added).
+The match is written to localStorage key `save` every 10 s of play, whenever the page is hidden (`visibilitychange`, `pagehide`, Capacitor `pause`) and when leaving to the menu; it is deleted when the match ends or a new battle starts. On launch, if a save exists, a **Resume match** button sits at the top of the start screen (map · time · faction · mode). `saveGame()` serializes `G` with a JSON replacer: entity links anywhere (orders, targets, shells, `G.sel`, `G.selBld`, `relic.home.live`) become `{$e:id}`, relic homes `{$h:index}`, fog grids base64 `{$u8}`; `resumeGame()` rebuilds them, drops orders whose target died, then rebuilds nav and the fog canvas. Also saved: map, difficulty, both factions, mode, camera. A mid-match save is ~75 KB. **Compatibility:** see *Save compatibility* (old saves are migrated, never discarded). The data model itself did not change (only `G.dev` was added).
+
+## Save compatibility (update safety)
+
+Goal: after any update, a player's saved match still resumes. Five layers, all in the game file next to `saveGame`:
+
+1. **Version + migrations.** Every save stores `v` (`SAVE_V`) and `game` (`GAME_VERSION`). `loadSave()` runs `MIGRATE[v]` steps in order until the save reaches the current `SAVE_V`, so a player can jump from any old version. Steps are never deleted. A save from a *newer* build (downgrade) is ignored and left untouched.
+2. **Tolerant load** (`resumeGame`). It starts a fresh match on the same map and uses it as defaults: entity fields and `G` fields the save predates are filled in; units/buildings of a removed type are dropped; queued units of a removed type and research of a removed upgrade are refunded; unknown upgrade ids are dropped and levels capped at `max`; links to dropped entities become `null`.
+3. **Balance patches apply to resumed matches.** Max HP and speed are re-derived from today's numbers (`refreshUnits`, building max HP), keeping each one's health %. Costs, damage and timers are read live anyway.
+4. **Never crash, never lose silently.** If a resume throws, or the game throws within 20 s after a resume, the save is moved to `save.bad` (kept for a bug report), the player gets a clear message and is back on the menu. A crash cannot repeat on every launch.
+5. **Durable storage.** In the Android app every key is also written to native **Preferences** (`@capacitor/preferences`, SharedPreferences), which the OS does not evict and which survives updates. On launch `restorePrefs()` copies keys back if localStorage was cleared. In the browser this is a no-op.
+
+**Checklist for every change** (a session must follow this):
+- Adding a field to units/buildings/`G` with a sensible default from `spawnUnit`/`spawnBld`/`newGame`: no version bump needed; layer 2 fills it. Make sure the fresh-match default is valid mid-match.
+- Renaming or re-meaning a field, changing a field's type, renaming a unit/building/upgrade/map/faction id, or anything else layer 2 cannot guess: **bump `SAVE_V`, add `MIGRATE[old]`**, add the new fixture (below), and tell the owner.
+- Removing a unit/building/upgrade: layer 2 handles it (drop + refund); still add a fixture test.
+- Removing a map or faction: old saves on it cannot resume; add a migration that maps them to a replacement, or accept and tell the owner.
+- **Fixtures:** `saves/` holds real saves written by older builds (`save-v1.json` now). `test-sim.js` resumes every file there and plays 30 s. Never delete a fixture. Before bumping `SAVE_V`, save a match with the *old* build into `saves/save-v<old>-<what>.json`, so the migration is tested against a real old save.
+- Bump `GAME_VERSION` with each release (diagnostics only).
+
+**Android specifics for updates (packaging time):** keep the app ID, `androidScheme` and `hostname` in `capacitor.config` fixed forever (localStorage belongs to the WebView origin; Preferences is the safety net anyway). Install `@capacitor/preferences` and `@capacitor/app`. Raise `versionCode` each release. A Play update kills the app process; the save-on-`pause` already covers that. Android Auto Backup can restore an old save onto a newer app version on a new phone; layer 1 handles that.
 
 ## Back button
 
@@ -194,7 +215,7 @@ Keep each map's run short (≈40 simulated seconds) — full-length games across
 
 `test-sim.js` reads the extracted script from `/tmp/g.js` (on Windows, Node resolves that to `\tmp\g.js` on the current drive — create the folder once). Besides the per-map crash run it checks: relic placement (random, near-equidistant), engineer repair, hacker prerequisites and both hacker jobs, level III lock, a sandbox match with the AI on both sides, units escaping ore/oil clusters, and which sounds fire (with a fake audio context) plus mute.
 
-Also checked: console availability per mode, save → play another match → resume (identical state, no broken links, keeps running, save cleared at the end), fog of war (hidden at start, spotted by a scout, buildings remembered, units not, off in sandbox), Hacker cost + Hacker cell research gate, and AI wave cohesion (drones stay over their riflemen).
+Also checked: **update safety** (every fixture in `saves/` resumes and plays; unknown unit/upgrade/queue entries, missing fields and a balance patch are tolerated; a migration step runs; a newer-build save is ignored and kept; a broken save is set aside), console availability per mode, save → play another match → resume (identical state, no broken links, keeps running, save cleared at the end), fog of war (hidden at start, spotted by a scout, buildings remembered, units not, off in sandbox), Hacker cost + Hacker cell research gate, and AI wave cohesion (drones stay over their riflemen).
 
 Other tools, all reading `./border-line-rts.html` directly: `node clash.js 20` (equal-ore armies, every faction vs every other: combat value per ore only, ~10 s), `node balance.js 8` (whole games, real AI on both sides, round robin on 4 workers: 120 games in ~3 min; the trusted balance number; prints a Hacker table; add `nohack` to A/B Hackers), `node console.js ...` (drives the in-game console headlessly). Use 8 games per pairing: below that, the noise between runs is ±20 points. `clash.js` and `balance.js` use `Math.random`, so two runs never match exactly; to compare before/after a change, preload a seeded `Math.random` with `node -r ./seed.js clash.js 50`.
 

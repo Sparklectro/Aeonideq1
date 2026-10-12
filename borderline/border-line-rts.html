@@ -1159,8 +1159,12 @@ const toMenu=()=>{$('#pause').classList.remove('show');$('#end').classList.remov
 $('#bmenu').onclick=toMenu;$('#bmenu2').onclick=toMenu;
 $('#bagain').onclick=()=>{$('#end').classList.remove('show');newGame(diff,mapId);};
 document.querySelectorAll('[data-diff]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-diff]').forEach(x=>x.classList.toggle('on',x===b));diff=b.dataset.diff;});
+// Storage: localStorage, mirrored in the Android app to native Preferences (@capacitor/preferences = SharedPreferences),
+// which the OS does not evict, survives app updates and does not depend on the WebView origin. See restorePrefs().
+const Prefs=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.Preferences;
 function loadKey(k){try{return localStorage.getItem(k);}catch(e){return null;}}
-function saveKey(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function saveKey(k,v){try{localStorage.setItem(k,v);}catch(e){}if(Prefs)Prefs.set({key:k,value:String(v)}).catch(()=>{});}
+function dropKey(k){try{localStorage.removeItem(k);}catch(e){}if(Prefs)Prefs.remove({key:k}).catch(()=>{});}
 mapId=loadKey('map')||'crossroads';if(!MAPS.some(m=>m.id===mapId))mapId='crossroads';
 {const d0=loadKey('diff');if(DIFF[d0]){diff=d0;document.querySelectorAll('[data-diff]').forEach(x=>x.classList.toggle('on',x.dataset.diff===diff));}}
 facId=loadKey('fac')||'urban';if(!FACTIONS[facId])facId='urban';
@@ -1279,7 +1283,9 @@ document.addEventListener('visibilitychange',()=>{if(AC){if(document.hidden)AC.s
 /* ---------- loop ---------- */
 let last=performance.now(),hudT=0,saveT=10;
 function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;
-  if(G&&!G.paused&&!G.over&&!$('#start').classList.contains('show')){const ts=G.timeScale||1;if(ts<1)update(dt*ts);else{const n=Math.min(8,Math.round(ts));for(let k=0;k<n;k++)update(dt);}}
+  if(G&&!G.paused&&!G.over&&!$('#start').classList.contains('show')){const ts=G.timeScale||1;
+    try{if(ts<1)update(dt*ts);else{const n=Math.min(8,Math.round(ts));for(let k=0;k<n;k++)update(dt);}}
+    catch(e){if(G&&G.resumedT!==undefined&&G.t-G.resumedT<20)quarantineSave(e);else throw e;}} // bad data from an old save shows up in the first seconds
   holdCheck();draw();
   if(G){hudT-=dt;miniT-=dt;
     if(hudT<=0){hudT=.12;$('#cr').textContent=Math.floor(G.credits[0]);const pu=popUsed(0),pc=popCap(0);const pe=$('#pop');pe.textContent=pu+'/'+pc;pe.style.color=pu>=pc?'#ff8a70':'';$('#clock').textContent=fmt(G.t);$('#bspeed').textContent='×'+(G.timeScale||1);
@@ -1363,37 +1369,72 @@ if(devBtn){devBtn.onclick=()=>devOpen(!devEl.classList.contains('show'));
   // F2 anywhere; ` ~ or " (Turkish-Q key left of 1) when not typing in the console
   addEventListener('keydown',e=>{if(!devAllowed())return;if(e.key==='F2'||(e.target!==devCmd&&(e.key==='`'||e.key==='~'||e.key==='"'))){e.preventDefault();devOpen(!devEl.classList.contains('show'));}});
   devShowBtn();}
-/* ---------- save / resume: a match survives the app being backgrounded or killed ---------- */
+/* ---------- save / resume: a match survives the app being backgrounded, killed or updated ---------- */
 // Saved every 10 s, when hidden and when leaving to the menu; cleared when the match ends. Entity links
 // (orders, targets, shells, selection, relic.live) are stored as {$e:id}, relic homes as {$h:i}, fog grids as base64.
-const SAVE_KEY='save',SAVE_V=1; // bump SAVE_V when entity fields change shape: older saves are then ignored
+// Update safety (see HANDOFF "Save compatibility"): old saves are MIGRATED, never thrown away; loading tolerates removed
+// content and fills fields a save predates; a save that still fails is set aside as 'save.bad' and the game carries on.
+const GAME_VERSION='0.9.0',SAVE_KEY='save',SAVE_V=1;
+// MIGRATE[n] turns a version-n save into version n+1. When you bump SAVE_V, add the step for the old number here.
+// Never delete a step: players can update straight from any old version, and the steps run in order 1→2→3…
+const MIGRATE={
+  // 1: d=>{ ...change d.G / d.G.ents from the v1 shape to the v2 shape...; return d; },
+};
 function saveGame(){if(!G||G.over)return;try{const ents=G.ents,homes=G.relicHomes||[];
-  localStorage.setItem(SAVE_KEY,JSON.stringify({v:SAVE_V,map:mapId,diff,fac:FAC,facId,sandbox:!!G.sandbox,dev:!!G.dev,cam:{x:cam.x,y:cam.y,z:cam.z},G},function(k,v){
+  saveKey(SAVE_KEY,JSON.stringify({v:SAVE_V,game:GAME_VERSION,map:mapId,diff,fac:FAC,facId,sandbox:!!G.sandbox,dev:!!G.dev,cam:{x:cam.x,y:cam.y,z:cam.z},G},function(k,v){
     if(v&&typeof v==='object'){
       if(v instanceof Uint8Array){let s='';for(let i=0;i<v.length;i+=8192)s+=String.fromCharCode.apply(null,v.subarray(i,i+8192));return{$u8:btoa(s)};}
       if(this!==ents&&v.id&&(v.kind==='unit'||v.kind==='bld'||v.kind==='res'))return{$e:v.id};
       if(this!==homes&&homes.includes(v))return{$h:homes.indexOf(v)};}
     return v;}));}catch(e){}}
-function clearSave(){try{localStorage.removeItem(SAVE_KEY);}catch(e){}}
-function loadSave(){try{const d=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');return d&&d.v===SAVE_V&&d.G&&MAPS.some(m=>m.id===d.map)&&FACTIONS[d.fac[0]]&&FACTIONS[d.fac[1]]?d:null;}catch(e){return null;}}
+function clearSave(){dropKey(SAVE_KEY);}
+// parse + migrate to the current version; null if there is no usable save (a save from a NEWER build is left untouched)
+function loadSave(){try{let d=JSON.parse(loadKey(SAVE_KEY)||'null');if(!d||!d.G||typeof d.v!=='number'||d.v>SAVE_V)return null;
+  while(d.v<SAVE_V){if(!MIGRATE[d.v])return null;d=MIGRATE[d.v](d);d.v++;}
+  return MAPS.some(m=>m.id===d.map)&&FACTIONS[d.fac[0]]&&FACTIONS[d.fac[1]]&&DIFF[d.diff]?d:null;}catch(e){return null;}}
+// a save that cannot be resumed is kept aside (for a bug report) instead of blocking or crashing the game
+function quarantineSave(err){const raw=loadKey(SAVE_KEY);if(raw)saveKey('save.bad',raw);clearSave();G=null;
+  $('#start').classList.add('show');$('#start').scrollTop=0;renderResume();devShowBtn();
+  toast('That saved match could not be resumed, so it was set aside. Start a new battle.',true);
+  try{console.error('save quarantined',err);}catch(e){}}
 function resumeGame(d){
-  diff=d.diff;facId=d.facId;sandboxMode=d.sandbox;devMode=d.dev;loadMap(d.map);
-  const g=d.G,byId=new Map(g.ents.map(e=>[e.id,e]));
+  diff=d.diff;facId=d.facId;sandboxMode=d.sandbox;devMode=d.dev;
+  newGame(diff,d.map); // a fresh match on the same map: it supplies defaults for anything this save predates
+  const fresh=G,g=d.G,tpl={};fresh.ents.forEach(e=>{tpl[e.kind]=tpl[e.kind]||e;});
+  // content removed or renamed since the save was written: drop it (queued units and research are refunded)
+  g.ents=g.ents.filter(e=>e.kind==='res'||(e.kind==='unit'?UNIT[e.type]:BLD[e.type]));
+  for(const e of g.ents){
+    if(e.queue)e.queue=e.queue.filter(q=>{if(UNIT[q.type])return true;g.credits[e.team]+=q.c||0;return false;});
+    if(e.kind==='bld'&&e.res&&!UPG[e.res.id]){g.credits[e.team]+=e.res.c||0;e.res=null;}}
+  g.up=g.up.map(u=>{const o={};for(const id in u)if(UPG[id])o[id]=Math.min(u[id],UPG[id].max);return o;});
+  const byId=new Map(g.ents.map(e=>[e.id,e]));
   const fix=v=>{if(Array.isArray(v)){for(let i=0;i<v.length;i++)v[i]=fix(v[i]);return v;}
     if(v&&typeof v==='object'){if('$e' in v)return byId.get(v.$e)||null;if('$h' in v)return g.relicHomes[v.$h];
       if('$u8' in v){const s=atob(v.$u8),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a;}
       for(const k in v)v[k]=fix(v[k]);}
     return v;};
   fix(g);
+  // fields added to entities or to G after this save was written: take the fresh match's default
+  for(const e of g.ents){const t=tpl[e.kind];if(t)for(const k in t)if(!(k in e)){const v=t[k];e[k]=Array.isArray(v)?[]:v&&typeof v==='object'?null:v;}}
+  for(const k in fresh)if(!(k in g))g[k]=fresh[k];
   for(const e of g.ents)if(e.order&&(e.order.type==='attack'||e.order.type==='repair')&&!e.order.target)e.order=null; // its target was gone
   g.shells=g.shells.filter(s=>s.t);g.sel=g.sel.filter(Boolean);
-  G=g;FAC=d.fac;COL=[FACTIONS[FAC[0]].col,FACTIONS[FAC[1]].col];G.paused=false;G.over=false;
+  G=g;FAC=d.fac;COL=[FACTIONS[FAC[0]].col,FACTIONS[FAC[1]].col];G.paused=false;G.over=false;G.resumedT=G.t;
+  // balance patches apply to a resumed match too: re-derive max hp / speed from today's numbers, keeping each one's health %
+  refreshUnits(0);refreshUnits(1);
+  for(const b of G.ents)if(b.kind==='bld'){const mh=BLD[b.type].hp*(FAC[b.team]==='urban'?.8:1);if(b.max!==mh){b.hp=b.hp*mh/b.max;b.max=mh;}}
   rebuildBlockers();fogCanvas();cam.x=d.cam.x;cam.y=d.cam.y;cam.z=d.cam.z;clampCam();
-  lastKey='';toastT=0;devShowBtn();toast('Match resumed: '+FACTIONS[FAC[0]].name+' vs '+FACTIONS[FAC[1]].name+'.');}
+  lastKey='';toastT=0;toast('Match resumed: '+FACTIONS[FAC[0]].name+' vs '+FACTIONS[FAC[1]].name+'.');}
 function renderResume(){const d=loadSave();$('#resumerow').hidden=!d;
   if(d)$('#resumeinfo').textContent=(MAPS.find(m=>m.id===d.map).name)+' · '+fmt(d.G.t)+' · '+FACTIONS[d.fac[0]].name+(d.sandbox?' · sandbox':d.dev?' · console':'');}
-$('#bcont').onclick=()=>{const d=loadSave();if(!d){renderResume();return;}$('#start').classList.remove('show');resumeGame(d);backArm();};
-renderResume();
+$('#bcont').onclick=()=>{const d=loadSave();if(!d){renderResume();return;}
+  try{resumeGame(d);}catch(e){quarantineSave(e);return;}
+  $('#start').classList.remove('show');devShowBtn();backArm();};
+// Android app: if the OS cleared the WebView's localStorage (or its origin changed), copy saved keys back from Preferences
+function restorePrefs(){if(!Prefs)return;Prefs.keys().then(async r=>{let n=0;
+  for(const k of r.keys)if(loadKey(k)===null){const v=(await Prefs.get({key:k})).value;if(v!=null){try{localStorage.setItem(k,v);n++;}catch(e){}}}
+  if(n){renderResume();renderMaps();}}).catch(()=>{});}
+renderResume();restorePrefs();
 
 /* ---------- Back button (Android hardware/gesture Back, browser Back): never leaves a match by accident ---------- */
 // match running -> Pause menu; Pause menu -> resume; end screen -> main menu; console open -> close it. On the main menu Back exits.
