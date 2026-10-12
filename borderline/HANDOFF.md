@@ -34,6 +34,7 @@ A single-file, touch-first RTS that runs in any mobile browser. This document is
 - **Hacker made expensive, at the owner's request:** costs 550 ore and needs the new HQ research **Hacker cell** (250 ore, 45 s) first; *Exploit kit* / *Burner rigs* stay hidden until then. AI trains at most 1 (`TUNABLES.ai.hackers`).
 - **Faction balance pass**, measured with the rewritten `balance.js` (real AI on both sides). Before → after, 120 games: Urban 73→48%, Smugglers 93→55%, Shadow 63→48%, Iron 27→55%, Mountain 27→45%, Sky 7→48%. Changes: Urban riflemen 42→54 ore (−10%); Smugglers ore bonus +25%→+10% and Cargo truck carry 20→12; Shadow speed +15%→+10%; Armed pickup hp 150→175, dmg 6→8; Sky drones 65→55 ore; Sky AI barracks mix 30% drones / 10% kamikaze / 60% riflemen.
 - **AI wave cohesion** (the real Sky fix): a marching AI wave keeps its drones over its ground units (end of `aiTick`), so fast flyers no longer arrive alone and die one by one. Applies to every AI faction, so the enemy AI is slightly tougher too.
+- **Third batch:** *All army* (and the console `army`) no longer grabs Hackers, so working Hackers keep siphoning/hacking (`armyOf`); manual **save slots** (5 + autosave); **end-of-match statistics** with charts; Engineers auto-repair buildings only. Balance after the Engineer change: Smugglers ore +10%→+5%, Urban build speed +40%→+25% (see *Balance noise*).
 - **Second batch (owner decisions):** three start modes (*Start battle* without console, *Battle with console*, *Sandbox: AI vs AI*); Saira Condensed embedded as base64 woff2 (no network request at all); fullscreen button removed (Android handles it); Back button opens Pause (see *Back button*); **save/resume** (see *Save / resume*).
 - **Tools:** `balance.js` now plays AI vs AI round robin on 4 parallel workers and reports Hacker stats, with a `nohack` A/B switch; `clash.js` now fights equal-ore armies, every faction vs every other.
 
@@ -93,6 +94,7 @@ One HTML file with three parts: `<style>` (the first `<style>` block is the embe
 | Panel UI | `btn`, `panelKey`, `renderPanel`, `livePanel`, `grpBtns`, panel click handler |
 | Menus/flow | `endGame`, `setPause`, `renderFacs`, `renderMaps`, `thumb`, start/pause/end wiring |
 | Sound | `SND` (sounds as stacks of voices), `audioInit` (context, noise buffers, reverb, wind bed), `sndVoice`, `sfx(kind,x,y,pitch,length)`, `setMute`; counters in `sfxN` |
+| Statistics | `stAdd`, `G.st`, `G.hist`, `renderStats`, `drawChart` |
 | Persistence | `loadKey`/`saveKey`/`dropKey` (localStorage + native Preferences mirror: last map, difficulty, faction, best times, mute), `restorePrefs`; match save: `saveGame`, `loadSave`, `MIGRATE`, `resumeGame`, `quarantineSave`, `clearSave`, `renderResume` |
 | Modes / console gate / Back | `startMode`, `devAllowed`, `devShowBtn`, `onBack`, `backArm` |
 
@@ -123,13 +125,13 @@ One HTML file with three parts: `<style>` (the first `<style>` block is the embe
 | Faction | Identity | Passive | Doctrine (HQ upgrade) |
 |---|---|---|---|
 | Mountain Cell | Ambush | Still 2s → invisible; first shot +50% | Hide after 1s; ambush shot ×2 |
-| Urban Network | Swarm | Riflemen −10% (54 ore), build +40% faster, −20% HP structures | Barracks train 35% faster |
+| Urban Network | Swarm | Riflemen −10% (54 ore), build +25% faster, −20% HP structures | Barracks train 35% faster |
 | Sky Brigade | Drones | Cheaper drones (55 ore) + Kamikaze unit | Drones +30% HP, bigger blasts |
-| Smugglers | Economy | +10% ore, Cargo truck worker (carries 12), −20% HP combat | Every unit −15% cost |
+| Smugglers | Economy | +5% ore, Cargo truck worker (carries 12), −20% HP combat | Every unit −15% cost |
 | Iron Militia | Speed | Factory builds Armed pickups (hit air) not tanks | Pickups +40% HP, +10% speed |
 | Shadow Cell | Sabotage | Saboteur disables buildings 12s; all units +10% speed | Sabotage 20s, recharge 2× faster |
 
-**Engineer** (all factions, HQ): repairs any damaged friendly unit or finished building within its sight on its own; tap a damaged unit/building with engineers selected to send them. Upgrade: *Field tools* (+30% repair per level).
+**Engineer** (all factions, HQ): repairs damaged friendly **buildings** within its sight on its own (owner's decision, 12 Oct); it heals **units only when sent**: select engineers and tap the damaged unit (or building). Upgrade: *Field tools* (+30% repair per level).
 
 **Hacker** (Urban Network, Shadow Cell, Smugglers only; HQ; 550 ore): can only be trained after the HQ research **Hacker cell** (`hackNet`, 250 ore) and while the team has a worker **and** an engineer alive. `UNIT.hacker.res` names the research; `UPG.need` hides the hacker upgrades until it is done. Two exclusive jobs: tap an **oil pool** → it stands there and siphons it (`TUNABLES.hack.rigRate`, more ore, drains the pool); press **Hack** → from anywhere it drains the enemy's banked ore straight to you (`hackRate`, less ore). Moving it stops the job. The victim gets a toast + minimap ping. Upgrades: *Exploit kit* (+30% rate per level), *Burner rigs* (+25% hacker HP per level). The `HACKERS` list holds the allowed factions.
 
@@ -164,6 +166,14 @@ Goal: after any update, a player's saved match still resumes. Five layers, all i
 - Bump `GAME_VERSION` with each release (diagnostics only).
 
 **Android specifics for updates (packaging time):** keep the app ID, `androidScheme` and `hostname` in `capacitor.config` fixed forever (localStorage belongs to the WebView origin; Preferences is the safety net anyway). Install `@capacitor/preferences` and `@capacitor/app`. Raise `versionCode` each release. A Play update kills the app process; the save-on-`pause` already covers that. Android Auto Backup can restore an old save onto a newer app version on a new phone; layer 1 handles that.
+
+## Manual save slots
+
+Pause menu: **Save game** / **Load game**; main menu: **Load game**. Five slots (`slot1`…`slot5` in storage) plus the **Autosave** (listed first under Load). Each slot shows map · match time · both factions, then difficulty · mode · date and clock time saved (`d.at`). Saving onto a used slot needs a second tap within 4 s ("tap again to overwrite"). Slots use exactly the same format, migrations and tolerant loading as the autosave (`saveGame(key)`, `loadSave(key)`, `loadFrom(key)`); a slot that fails to load is set aside like the autosave. Slots are kept when a match ends; only the autosave is cleared. A slot written by a newer build shows "Saved by a newer version of the game" and cannot be loaded. Code: `openSlots`, `renderSlots`, `slotInfo`, `loadFrom`.
+
+## End-of-match statistics
+
+`G.st[team]` counts units trained / lost / enemy units destroyed, buildings built / lost, ore gathered (mining, relics, hacking), ore spent (refunds subtracted), upgrades researched and largest army (supply). `G.hist` samples `[t, army0, army1, ore0, ore1]` every 5 s. The end screen shows a two-column table (better value highlighted) and two charts: army size and ore gathered over time (`renderStats`, `drawChart`). Hooks: `stAdd` in `train`, `research`, `placeBld`, the queue-cancel button, `updWorker` delivery, relic pickup, `updHacker`, `updBld` (built / research done / unit spawned) and `kill` (a kamikaze's own blast does not count as an enemy kill). Old saves without these fields get them from the tolerant loader (no `SAVE_V` bump was needed: the first real use of the save-compatibility rules).
 
 ## Back button
 
@@ -217,7 +227,7 @@ Keep each map's run short (≈40 simulated seconds) — full-length games across
 
 Also checked: **update safety** (every fixture in `saves/` resumes and plays; unknown unit/upgrade/queue entries, missing fields and a balance patch are tolerated; a migration step runs; a newer-build save is ignored and kept; a broken save is set aside), console availability per mode, save → play another match → resume (identical state, no broken links, keeps running, save cleared at the end), fog of war (hidden at start, spotted by a scout, buildings remembered, units not, off in sandbox), Hacker cost + Hacker cell research gate, and AI wave cohesion (drones stay over their riflemen).
 
-Other tools, all reading `./border-line-rts.html` directly: `node clash.js 20` (equal-ore armies, every faction vs every other: combat value per ore only, ~10 s), `node balance.js 8` (whole games, real AI on both sides, round robin on 4 workers: 120 games in ~3 min; the trusted balance number; prints a Hacker table; add `nohack` to A/B Hackers), `node console.js ...` (drives the in-game console headlessly). Use 8 games per pairing: below that, the noise between runs is ±20 points. `clash.js` and `balance.js` use `Math.random`, so two runs never match exactly; to compare before/after a change, preload a seeded `Math.random` with `node -r ./seed.js clash.js 50`.
+Other tools, all reading `./border-line-rts.html` directly: `node clash.js 20` (equal-ore armies, every faction vs every other: combat value per ore only, ~10 s), `node balance.js 8` (whole games, real AI on both sides, round robin on 4 workers: 120 games in ~3 min; the trusted balance number; prints a Hacker table; add `nohack` to A/B Hackers), `node console.js ...` (drives the in-game console headlessly). **Balance noise:** two 120-game runs of the same build can differ by 15+ points per faction. Tune only on 20 games per pairing (`node balance.js 20`, 300 games, ~8 min) or on several runs pooled; 8 per pairing is a quick check only. `clash.js` and `balance.js` use `Math.random`, so two runs never match exactly; to compare before/after a change, preload a seeded `Math.random` with `node -r ./seed.js clash.js 50`.
 
 In a browser, the audio engine can be measured without ears: swap `window.AudioContext` for an `OfflineAudioContext`, call `audioInit()`, schedule a sound's voices with `sndVoice`, render, and read peak level and audible duration.
 

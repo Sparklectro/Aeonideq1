@@ -194,4 +194,27 @@ facId = 'urban'; sandboxMode = false; newGame('normal', 'delta'); FAC[1] = 'sky'
 facId = 'urban'; sandboxMode = false; devMode = false; newGame('normal', 'crossroads');
 { const hk = spawnUnit('hacker', 0, PHQ.x + 60, PHQ.y); hk.order = { type: 'hack' }; spawnUnit('engineer', 0, PHQ.x + 80, PHQ.y);
   const sel = armyOf(0); console.log('All army: hacker included', sel.includes(hk), '| workers included', sel.some(isWorker), '| picks', [...new Set(sel.map(u => u.type))].join(','), '| hacker still hacking', hk.order.type); }
+
+// engineers: repair buildings on their own, heal units only when sent
+facId = 'urban'; newGame('normal', 'crossroads'); G.ai.t = -1e9;
+{ const hq = G.ents.find(e => e.team===0 && e.type==='hq'), sol = spawnUnit('soldier', 0, PHQ.x + 120, PHQ.y - 60), en = spawnUnit('engineer', 0, PHQ.x + 110, PHQ.y - 40);
+  sol.hp = 20; for (let i = 0; i < 60*4; i++) update(1/60); const idle = Math.round(sol.hp);
+  en.order = { type: 'repair', target: sol }; for (let i = 0; i < 60*4; i++) update(1/60); const sent = Math.round(sol.hp);
+  hq.hp -= 300; en.order = null; const h0 = hq.hp; for (let i = 0; i < 60*8; i++) update(1/60);
+  console.log('engineer: unit hp left alone', idle, '| after sending', sent, '| HQ auto-repaired +' + Math.round(hq.hp - h0)); }
+
+// manual save slots: save to slot 3, keep playing, load it back; the autosave is separate
+{ const store = {}; localStorage.getItem = k => k in store ? store[k] : null; localStorage.setItem = (k,v) => { store[k] = String(v); }; localStorage.removeItem = k => { delete store[k]; };
+  facId = 'iron'; newGame('hard', 'canyon'); for (let i = 0; i < 60*60; i++) update(1/60);
+  const snap = JSON.stringify(snapshot()); const okSave = saveGame('slot3'); const info = slotInfo(loadSave('slot3'));
+  for (let i = 0; i < 60*30; i++) update(1/60); saveGame();
+  loadFrom('slot3'); const back = JSON.stringify(snapshot()) === snap;
+  console.log('slot3 saved', okSave, '|', info.join(' / ').replace(/Saved .*/, 'Saved <date>'), '| loaded back identical', back, '| empty slot', loadSave('slot1') === null, '| autosave separate', !!loadSave()); }
+
+// statistics: a full AI-vs-AI match; kills/losses mirror each other and ore adds up
+facId = 'smugglers'; sandboxMode = true; newGame('normal', 'saltflats');
+for (let i = 0; i < 60*1200 && !G.over; i++) update(1/60); sandboxMode = false;
+{ const S = G.st, bal = t => Math.abs(TUNABLES.eco.startCredits + S[t].ore - S[t].spent - G.credits[t]) < 1;
+  console.log('stats after', fmt(G.t), 'over', G.over, '| you', JSON.stringify(S[0]), '| kills/losses mirror', S[0].kills <= S[1].lost && S[1].kills <= S[0].lost,
+    '| ore adds up', bal(0) && bal(1), '| chart samples', G.hist.length); }
 `);

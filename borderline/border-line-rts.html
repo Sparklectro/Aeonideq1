@@ -129,6 +129,17 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .mapc span{font-size:13px;color:var(--muted);line-height:1.15}
 .mapc.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .mapc.on b{color:var(--accent)}
+.stt{width:100%;border-collapse:collapse;margin-top:6px;font-size:16px}
+.stt th,.stt td{padding:5px 4px;border-bottom:1px solid var(--line);text-align:right}
+.stt th{font-weight:800;font-size:15px}.stt td:first-child,.stt th:first-child{text-align:left;color:var(--muted);font-weight:400}
+.stt .win{color:var(--accent);font-weight:800}
+.chart{margin-top:12px}.chart b{font-size:15px;font-weight:600;color:var(--muted);display:block;margin-bottom:3px}
+.chart canvas{width:100%;height:110px;display:block;background:rgba(0,0,0,.22);border-radius:6px}
+.b.slot{width:100%;align-items:flex-start;text-align:left;margin-top:8px;padding:8px 12px;min-height:60px;gap:2px}
+.b.slot b{font-size:18px;font-weight:800}
+.b.slot span{font-size:15px;font-weight:400;color:var(--muted)}
+.b.slot.on span{color:#3b3d22}
+.b.slot:disabled{opacity:.45}
 </style>
 </head>
 <body>
@@ -170,6 +181,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <button class="b" data-diff="hard">Hard</button>
     </div>
     <div class="row"><button class="b" id="bstart" style="min-height:58px;font-size:22px;font-weight:800">Start battle</button></div>
+    <div class="row"><button class="b" id="bload2">Load game</button></div>
     <div class="row"><button class="b" id="bdev">Battle with console</button><button class="b" id="bsandbox">Sandbox: AI vs AI</button></div>
     <ul class="how">
       <li>Start battle is the normal match. Battle with console is the same match plus the developer console (»_) for testing; Sandbox lets the AI play both sides, also with the console.</li>
@@ -184,7 +196,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <li>Tap your HQ to train workers. They mine ore on their own.</li>
       <li>Barracks train riflemen and drones. Factories build tanks. Depots add supply.</li>
       <li>Drones fly and wreck tanks, but tanks can't shoot back. Riflemen and turrets hit both.</li>
-      <li>Engineers (from HQ) repair damaged units and buildings nearby on their own.</li>
+      <li>Engineers (from HQ) repair nearby buildings on their own. To heal a unit, select engineers and tap the damaged unit.</li>
       <li>Urban Network, Shadow Cell and Smugglers can research Hacker cell at HQ, then train Hackers (550 ore) once they have a worker and an engineer. Send one to an oil pool to siphon it, or press Hack to drain enemy ore from anywhere.</li>
       <li>Fog of war: you only see what your units and buildings see. Dark ground is unexplored; enemy buildings stay marked once spotted.</li>
       <li>Relics land in a new spot every match. After 8:00, level III weapon and armor upgrades unlock.</li>
@@ -196,8 +208,18 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   <div class="card">
     <h2>Paused</h2>
     <div class="row"><button class="b" id="bresume">Resume</button></div>
+    <div class="row"><button class="b" id="bsave">Save game</button><button class="b" id="bload">Load game</button></div>
     <div class="row"><button class="b" id="bmute">Sound: on</button></div>
     <div class="row"><button class="b" id="brestart">Restart</button><button class="b" id="bmenu">Main menu</button></div>
+  </div>
+</div>
+
+<div class="sheet" id="slots">
+  <div class="card">
+    <h2 id="slotsT">Save game</h2>
+    <p id="slotsHint" class="facinfo"></p>
+    <div id="slotlist"></div>
+    <div class="row"><button class="b" id="bslotsback">‹ Back</button></div>
   </div>
 </div>
 
@@ -205,6 +227,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   <div class="card">
     <h2 id="etitle">Victory</h2>
     <p id="etext"></p>
+    <div id="estats"></div>
     <div class="row"><button class="b" id="bagain">Play again</button><button class="b" id="bmenu2">Main menu</button></div>
   </div>
 </div>
@@ -290,11 +313,11 @@ const DIFF=TUNABLES.diff,UNIT=TUNABLES.unit,BLD=TUNABLES.bld,POPMAX=TUNABLES.pop
 const FACTIONS={
   mountain:{name:'Mountain Cell',tag:'Ambush',blurb:'Units that hold still for 2 seconds vanish until an enemy gets close. Their first shot hits 50% harder.',
     col:{main:'#3f9a4b',dark:'#1d5427',light:'#b4e8a6',rgb:'185,240,170'}},
-  urban:{name:'Urban Network',tag:'Swarm',blurb:'Riflemen cost 10% less and buildings go up 40% faster, but structures are 20% weaker.',
+  urban:{name:'Urban Network',tag:'Swarm',blurb:'Riflemen cost 10% less and buildings go up 25% faster, but structures are 20% weaker.',
     col:{main:'#3a6fe0',dark:'#1f3f8a',light:'#a9c6ff',rgb:'170,210,255'}},
   sky:{name:'Sky Brigade',tag:'Drones',blurb:'Cheaper drones, plus kamikaze drones that dive into ground targets and explode.',
     col:{main:'#8656d0',dark:'#452580',light:'#d9c6ff',rgb:'215,195,255'}},
-  smugglers:{name:'Smugglers',tag:'Economy',blurb:'10% more ore and a fast cargo truck, but combat units have 20% less health.',
+  smugglers:{name:'Smugglers',tag:'Economy',blurb:'5% more ore and a fast cargo truck, but combat units have 20% less health.',
     col:{main:'#d99a1e',dark:'#7a530e',light:'#ffe3a3',rgb:'255,225,150'}},
   iron:{name:'Iron Militia',tag:'Speed',blurb:'Armed pickups replace tanks: fast, cheap, and able to shoot down drones.',
     col:{main:'#c8452e',dark:'#7a2616',light:'#ffb3a0',rgb:'255,170,140'}},
@@ -349,7 +372,7 @@ function research(b,id){const team=b.team,u=UPG[id],L=lvl(team,id);
   if(L>=u.max)return 'Already maxed';if(upPending(team,id))return 'Already being researched';
   if(u.req&&!hasBuilt(team,u.req))return 'Needs a Barracks first';
   const c=u.cost[L];if(G.credits[team]<c)return 'Not enough ore';
-  G.credits[team]-=c;b.res={id,t:0,dur:u.time[L],c};return null;}
+  G.credits[team]-=c;stAdd(team,'spent',c);b.res={id,t:0,dur:u.time[L],c};return null;}
 const ROMAN=['','I','II','III'];
 const isWorker=e=>!!(UNIT[e.type]&&UNIT[e.type].worker);
 function costOf(team,type){const f=FAC[team];let c=UNIT[type].cost;if(f==='urban'&&type==='soldier')c=54;if(f==='sky'&&type==='drone')c=55;if(f==='smugglers'&&hasDoc(team))c=Math.round(c*.85);return c;}
@@ -458,7 +481,7 @@ function navTo(u,x,y,dt,sp,face){
 /* ---------- entities ---------- */
 function spawnUnit(type,team,x,y){const s=UNIT[type],hp=unitMaxHp(team,type);const u={id:G.nextId++,kind:'unit',type,team,x,y,hp,max:hp,spd:unitSpd(team,type),px:x,py:y,still:0,angle:team?Math.PI*.75:-Math.PI*.25,cool:0,scan:Math.random()*.3,order:null,target:null,load:0,full:false,gt:0,hitT:0};G.ents.push(u);return u;}
 function spawnBld(type,team,x,y,built){const s=BLD[type];const c={x:W/2,y:H/2},a=Math.atan2(c.y-y,c.x-x),d=s.size+70;
-  const mh=s.hp*(FAC[team]==='urban'?.8:1);const b={id:G.nextId++,kind:'bld',type,team,x,y,hp:built?mh:mh*.1,max:mh,btime:s.time*(FAC[team]==='urban'?.6:1),offUntil:0,built:!!built,prog:built?1:0,queue:[],rally:freePoint(x+Math.cos(a)*d,y+Math.sin(a)*d,20),cool:0,scan:0,target:null,angle:a,hitT:0};
+  const mh=s.hp*(FAC[team]==='urban'?.8:1);const b={id:G.nextId++,kind:'bld',type,team,x,y,hp:built?mh:mh*.1,max:mh,btime:s.time*(FAC[team]==='urban'?.75:1),offUntil:0,built:!!built,prog:built?1:0,queue:[],rally:freePoint(x+Math.cos(a)*d,y+Math.sin(a)*d,20),cool:0,scan:0,target:null,angle:a,hitT:0};
   G.ents.push(b);G.navDirty=true;return b;}
 function addRes(cx,cy,n,amt,rtype){const val=rtype==='oil'?TUNABLES.eco.oilVal:1;for(let i=0;i<n;i++){const a=i/n*Math.PI*2+srng(-.25,.25),d=n>1?srng(26,50):0;
   G.ents.push({id:G.nextId++,kind:'res',rtype:rtype||'ore',val,x:cx+Math.cos(a)*d,y:cy+Math.sin(a)*d,amount:amt,max:amt,r:rtype==='oil'?16:13,seed:srand()*6});}}
@@ -510,7 +533,7 @@ function newGame(d,mid){
   const others=Object.keys(FACTIONS).filter(k=>k!==facId);FAC=[facId,others[Math.floor(Math.random()*others.length)]];
   COL=[FACTIONS[FAC[0]].col,FACTIONS[FAC[1]].col];
   G={up:[{},{}],t:0,ents:[],fx:[],shells:[],pings:[],nextId:1,credits:[TUNABLES.eco.startCredits,TUNABLES.eco.startCredits],sel:[],selBld:null,placing:null,buildMenu:false,boxMode:false,box:null,
-     paused:false,over:false,endAt:0,stats:{killed:0,lost:0},ai:{wave:0,t:0,strat:'balanced'},ai0:{wave:0,t:0,strat:'balanced'},sandbox:sandboxMode,dev:devMode,alertT:-99,lastTap:null};
+     paused:false,over:false,endAt:0,stats:{killed:0,lost:0},st:[0,1].map(()=>({trained:0,lost:0,kills:0,built:0,bldLost:0,ore:0,spent:0,ups:0,peak:0})),hist:[],histT:0,ai:{wave:0,t:0,strat:'balanced'},ai0:{wave:0,t:0,strat:'balanced'},sandbox:sandboxMode,dev:devMode,alertT:-99,lastTap:null};
   spawnBld('hq',0,PHQ.x,PHQ.y,true);spawnBld('hq',1,EHQ.x,EHQ.y,true);rebuildBlockers();
   seedS=MAP.seed*104729;
   MAP.res.forEach(p=>{addRes(p[0],p[1],p[2],p[3]);const m=mir(p[0],p[1]);addRes(m[0],m[1],p[2],p[3]);});
@@ -531,6 +554,8 @@ function newGame(d,mid){
   try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{});}catch(e){}
 }
 
+// end-of-match statistics per team (G.st) and a sample every 5 s for the charts (G.hist: [t, army0, army1, ore0, ore1])
+function stAdd(team,k,n){const s=G&&G.st&&G.st[team];if(s)s[k]+=n===undefined?1:n;}
 function popCap(team){let c=0;for(const e of G.ents)if(e.kind==='bld'&&e.team===team&&e.built&&!e.dead)c+=BLD[e.type].pop||0;return Math.min(POPMAX,c);}
 function popUsed(team){let c=0;for(const e of G.ents){if(e.dead||e.team!==team)continue;if(e.kind==='unit')c+=UNIT[e.type].pop;else if(e.kind==='bld')for(const q of e.queue)c+=UNIT[q.type].pop;}return c;}
 function hasBuilt(team,type){return G.ents.some(e=>e.kind==='bld'&&e.team===team&&e.type===type&&e.built&&!e.dead);}
@@ -545,7 +570,7 @@ function train(b,type){const team=b.team,s=UNIT[type],cost=costOf(team,type);
   if(s.needs&&!s.needs.every(t=>hasUnit(team,t)))return 'Needs a Worker and an Engineer first';
   if(G.credits[team]<cost)return 'Not enough ore';
   if(popUsed(team)+s.pop>popCap(team))return popCap(team)>=POPMAX?'Supply maxed out':'Out of supply. Build a Depot.';
-  G.credits[team]-=cost;b.queue.push({type,t:0,c:cost});return null;}
+  G.credits[team]-=cost;stAdd(team,'spent',cost);b.queue.push({type,t:0,c:cost});return null;}
 
 function canPlace(team,type,x,y){const sz=BLD[type].size;
   if(x<sz+20||y<sz+20||x>W-sz-20||y>H-sz-20)return false;
@@ -555,7 +580,7 @@ function canPlace(team,type,x,y){const sz=BLD[type].size;
     else if(e.kind==='res'&&d<sz+e.r+30)return false;}
   for(const o of OBS)if(Math.hypot(o.x-x,o.y-y)<o.r+sz*1.3+26)return false;
   return near;}
-function placeBld(team,type,x,y){G.credits[team]-=BLD[type].cost;const b=spawnBld(type,team,x,y,false);if(team===1||G.sandbox){const st=aiOf(team).stage;b.rally={x:st.x,y:st.y};}return b;}
+function placeBld(team,type,x,y){G.credits[team]-=BLD[type].cost;stAdd(team,'spent',BLD[type].cost);const b=spawnBld(type,team,x,y,false);if(team===1||G.sandbox){const st=aiOf(team).stage;b.rally={x:st.x,y:st.y};}return b;}
 
 function bestRes(u,maxD){let best=null,bs=1e9;
   for(const r of G.ents){if(r.kind!=='res'||r.dead||r.rtype==='relic')continue;const d=dist(u,r);if(d>maxD)continue;
@@ -597,7 +622,7 @@ function kill(e){
   fxAdd({k:'boom',x:e.x,y:e.y,r0:big*.4,r1:big*2.2,life:.5,c:'255,170,70'});
   fxAdd({k:'ring',x:e.x,y:e.y,r0:big,r1:big*3,life:.6});
   for(let i=0;i<(e.kind==='bld'?16:6);i++){const a=rand(0,6.3),v=rand(30,110);fxAdd({k:'deb',x:e.x,y:e.y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:rand(.4,.9),c:e.team>=0?COL[e.team].dark:'#333'});}
-  if(e.kind==='unit'){if(e.team===0)G.stats.lost++;else G.stats.killed++;}else if(e.kind==='bld')G.navDirty=true;
+  if(e.kind==='unit'){if(e.team===0)G.stats.lost++;else G.stats.killed++;stAdd(e.team,'lost');if(!e.selfKill)stAdd(1-e.team,'kills');}else if(e.kind==='bld'){G.navDirty=true;stAdd(e.team,'bldLost');}
   if(e.kind==='bld'&&e.type==='hq'&&!G.endAt){G.endAt=G.t+1.8;G.win=e.team===1;}
 }
 
@@ -608,7 +633,7 @@ function updWorker(u,dt){const s=UNIT[u.type],o=u.order;
   if(o.type==='move'){navTo(u,o.x,o.y,dt,u.spd,true);if(Math.hypot(u.x-o.x,u.y-o.y)<8)u.order=null;return;}
   if(o.type!=='gather'){u.order=null;return;}
   if(u.full){const dr=nearestDrop(u);if(!dr){u.order=null;return;}
-    if(dist(u,dr)<=rad(dr)*1.15+s.r+9){const gain=u.load*(u.loadVal||1)*(u.team?DIFF[diff].mult:1)*(FAC[u.team]==='smugglers'?1.1:1);G.credits[u.team]+=gain;
+    if(dist(u,dr)<=rad(dr)*1.15+s.r+9){const gain=u.load*(u.loadVal||1)*(u.team?DIFF[diff].mult:1)*(FAC[u.team]==='smugglers'?1.05:1);G.credits[u.team]+=gain;stAdd(u.team,'ore',gain);
       if(u.team===0&&onScreen(dr,40))fxAdd({k:'text',x:dr.x+rand(-12,12),y:dr.y-rad(dr),txt:'+'+Math.round(gain),life:1});
       u.load=0;u.full=false;}
     else navTo(u,dr.x,dr.y,dt,u.spd,true);return;}
@@ -641,7 +666,7 @@ function updEngineer(u,dt){const s=UNIT[u.type];let o=u.order;
   if(o&&o.type==='move'){navTo(u,o.x,o.y,dt,u.spd,true);if(Math.hypot(u.x-o.x,u.y-o.y)<8)u.order=null;return;}
   if(o&&(o.type!=='repair'||o.target.dead||o.target.hp>=o.target.max))u.order=o=null;
   if(!o){u.scan-=dt;if(u.scan>0)return;u.scan=rand(.4,.6);let best=null,bd=s.sight;
-    for(const e of G.ents){if(e===u||e.dead||e.team!==u.team||e.kind==='res'||e.hp>=e.max||(e.kind==='bld'&&!e.built))continue;const d=dist(u,e);if(d<bd){bd=d;best=e;}}
+    for(const e of G.ents){if(e.dead||e.team!==u.team||e.kind!=='bld'||e.hp>=e.max||!e.built)continue; /* on their own: buildings only; units are healed when you send them */const d=dist(u,e);if(d<bd){bd=d;best=e;}}
     if(!best)return;u.order=o={type:'repair',target:best};}
   const t=o.target;
   if(dist(u,t)-rad(t)>s.range){navTo(u,t.x,t.y,dt,u.spd,true);return;}
@@ -660,12 +685,12 @@ function updHacker(u,dt){const o=u.order,HK=TUNABLES.hack;u.hacking=false;
   else if(o.type==='hack'){const foe=1-u.team;gain=Math.min(Math.max(0,G.credits[foe]),HK.hackRate*rate*dt);G.credits[foe]-=gain;
     if(foe===0&&G.t-(G.hackAlertT||-99)>HK.alertCooldown){G.hackAlertT=G.t;sfx('alert');toast('Enemy hacker is draining your ore. Hunt it down.',true);G.pings.push({x:u.x,y:u.y,life:3.5});}}
   else{u.order=null;return;}
-  u.hacking=true;G.credits[u.team]+=gain;u.hacc=(u.hacc||0)+gain;
+  u.hacking=true;G.credits[u.team]+=gain;stAdd(u.team,'ore',gain);u.hacc=(u.hacc||0)+gain;
   if(u.hacc>=10){u.hacc-=10;if(u.team===0&&onScreen(u,40))fxAdd({k:'text',x:u.x,y:u.y-14,txt:'+10',life:1});}}
 function blast(u,s){const t=u.target,dm=dmgMult(u),bl=s.blast*(hasDoc(u.team)&&FAC[u.team]==='sky'?1.3:1);
   for(const e of G.ents){if(e.dead||e.kind==='res'||e.team===u.team||isFly(e))continue;const dd=Math.hypot(e.x-u.x,e.y-u.y)-rad(e);
     if(e===t)dealDmg(e,s.dmg*dm,u);else if(dd<bl)dealDmg(e,s.dmg*.6*dm,u);}
-  sfx('boom',u.x,u.y,1.1,.8);fxAdd({k:'boom',x:u.x,y:u.y,r0:8,r1:bl,life:.4,c:'255,170,70'});kill(u);}
+  sfx('boom',u.x,u.y,1.1,.8);fxAdd({k:'boom',x:u.x,y:u.y,r0:8,r1:bl,life:.4,c:'255,170,70'});u.selfKill=true;kill(u);}
 function updCombat(u,dt){const s=UNIT[u.type];
   if(s.saboteur)return updSaboteur(u,dt);
   if(u.order&&u.order.type==='attack'){if(u.order.target.dead)u.order=null;else u.target=u.order.target;}
@@ -681,9 +706,9 @@ function updCombat(u,dt){const s=UNIT[u.type];
 }
 function updBld(b,dt){const s=BLD[b.type];
   if(!b.built){b.prog+=dt/b.btime;b.hp=Math.min(b.max,b.hp+b.max*.9*dt/b.btime);
-    if(b.prog>=1){b.built=true;b.prog=1;if(b.team===0){toast(s.name+' ready.');lastKey='';sfx('built');}}return;}
+    if(b.prog>=1){b.built=true;b.prog=1;stAdd(b.team,'built');if(b.team===0){toast(s.name+' ready.');lastKey='';sfx('built');}}return;}
   if(b.offUntil>G.t)return;
-  if(b.res){b.res.t+=dt;if(b.res.t>=b.res.dur){const id=b.res.id;b.res=null;G.up[b.team][id]=(G.up[b.team][id]||0)+1;refreshUnits(b.team);
+  if(b.res){b.res.t+=dt;if(b.res.t>=b.res.dur){const id=b.res.id;b.res=null;G.up[b.team][id]=(G.up[b.team][id]||0)+1;stAdd(b.team,'ups');refreshUnits(b.team);
     if(b.team===0){toast(upName(0,id)+(UPG[id].max>1?' '+ROMAN[lvl(0,id)]:'')+' complete.');lastKey='';sfx('upg');}}}
   if(b.type==='turret'){b.cool-=dt;b.scan-=dt;const rg=rangeOf(b);
     if(b.target&&(b.target.dead||b.target.hidden||dist(b,b.target)-rad(b.target)>rg))b.target=null;
@@ -693,7 +718,7 @@ function updBld(b,dt){const s=BLD[b.type];
   if(b.queue.length){const q=b.queue[0];q.t+=dt;
     if(q.t>=trainTime(b.team,q.type)){b.queue.shift();if(b.team===0){lastKey='';sfx(VEH.includes(q.type)?'vready':'ready');}
       const rp=b.rally,sp=spawnSpot(b,rp,UNIT[q.type].r);
-      const u=spawnUnit(q.type,b.team,sp.x,sp.y);u.angle=sp.a;
+      const u=spawnUnit(q.type,b.team,sp.x,sp.y);u.angle=sp.a;stAdd(b.team,'trained');
       if(isWorker(q)){const r=G.ents.find(e=>e.kind==='res'&&!e.dead&&Math.hypot(e.x-rp.x,e.y-rp.y)<30);if(r)u.order={type:'gather',res:r};else autoGather(u);}
       else{const f=isFly(u)?{x:rp.x+rand(-26,26),y:rp.y+rand(-26,26)}:freePoint(rp.x+rand(-26,26),rp.y+rand(-26,26),UNIT[q.type].r+4);u.order={type:'move',x:f.x,y:f.y};u.navT=0;}}}
 }
@@ -780,7 +805,7 @@ function update(dt){
   if(G.relicHomes)for(const h of G.relicHomes){
     if(h.live&&!h.live.dead){const r=h.live;let got=-1;
       for(const e of G.ents){if(e.kind!=='unit'||e.dead)continue;if(dist(e,r)<r.r+rad(e)+4){got=e.team;break;}}
-      if(got>=0){r.dead=true;h.live=null;h.next=G.t+TUNABLES.eco.relicRespawn;const bonus=TUNABLES.eco.relicBonus;G.credits[got]+=bonus;
+      if(got>=0){r.dead=true;h.live=null;h.next=G.t+TUNABLES.eco.relicRespawn;const bonus=TUNABLES.eco.relicBonus;G.credits[got]+=bonus;stAdd(got,'ore',bonus);
         fxAdd({k:'boom',x:r.x,y:r.y,r0:6,r1:34,life:.5,c:'255,215,120'});fxAdd({k:'ring',x:r.x,y:r.y,r0:14,r1:46,life:.7});
         if(got===0){fxAdd({k:'text',x:r.x,y:r.y-14,txt:'Relic +'+bonus,life:1.4});toast('Relic collected. +'+bonus+' ore.');sfx('relic');}
         else toast('Enemy grabbed a relic.',true);}}
@@ -798,6 +823,8 @@ function update(dt){
   G.shells=G.shells.filter(s=>!s.done);
   separate();
   if(G.fog&&(G.fog.t-=dt)<=0){G.fog.t=.15;updFog();}
+  if(G.st&&(G.histT-=dt)<=0){G.histT=5;const a=[0,0];for(const e of G.ents)if(e.kind==='unit'&&!e.dead&&!isWorker(e))a[e.team]+=UNIT[e.type].pop;
+    G.hist.push([Math.round(G.t),a[0],a[1],Math.round(G.st[0].ore),Math.round(G.st[1].ore)]);G.st[0].peak=Math.max(G.st[0].peak,a[0]);G.st[1].peak=Math.max(G.st[1].peak,a[1]);}
   G.ai.t+=dt;if(G.ai.t>=1){G.ai.t=0;aiTick(1);if(G.sandbox)aiTick(0);}
   if(!G.late&&G.t>=TUNABLES.eco.lateTier){G.late=true;lastKey='';toast('Late war: level III upgrades unlocked.');}
   for(const f of G.fx){f.life-=dt;if(f.k==='deb'){f.x+=f.vx*dt;f.y+=f.vy*dt;f.vx*=.92;f.vy*=.92;}}
@@ -1107,7 +1134,7 @@ function renderPanel(){let info='',h='';
     if(b.queue.length)info+='<div class="queue">'+b.queue.map((q,i)=>`<button class="chip" data-act="cancel" data-v="${i}" aria-label="Cancel">${UNIT[q.type].name}${i===0?'<i id="q0"></i>':''}</button>`).join('')+'</div>';
     h=btn('desel','‹ Back')+h;}
   else if(G.sel.length){const c={};G.sel.forEach(u=>c[u.type]=(c[u.type]||0)+1);
-    info=`<b>${G.sel.length} selected</b>`+Object.keys(c).map(t=>`${c[t]} ${UNIT[t].name}${c[t]>1?'s':''}`).join(', ')+(c.hacker?'. Tap an oil pool to siphon it, or Hack to drain enemy ore from anywhere.':c.engineer?'. They repair nearby damage on their own; tap a damaged unit or building to send them.':c.saboteur?'. Tap an enemy building to sabotage it.':'. Tap the map to move.');
+    info=`<b>${G.sel.length} selected</b>`+Object.keys(c).map(t=>`${c[t]} ${UNIT[t].name}${c[t]>1?'s':''}`).join(', ')+(c.hacker?'. Tap an oil pool to siphon it, or Hack to drain enemy ore from anywhere.':c.engineer?'. They repair nearby buildings on their own; tap a damaged unit to heal it.':c.saboteur?'. Tap an enemy building to sabotage it.':'. Tap the map to move.');
     h=btn('desel','‹ Back')+(c.hacker?btn('hack','Hack',null,null,false,'hacker'):'')+btn('stop','Stop',null,null,false,'turretU')+btn('army','All army',null,null,false,'soldier')+grpBtns('set');}
   else if(G.buildMenu){info='Pick a building, then tap where it goes.';
     h=btn('closebuild','‹ Back');['barracks','factory','turret','depot'].forEach(t=>h+=btn('place',BLD[t].name,BLD[t].cost,t));}
@@ -1137,7 +1164,7 @@ $('#panel').addEventListener('click',e=>{const b=e.target.closest('button');if(!
     case 'desel':G.sel=[];G.selBld=null;break;
     case 'stop':G.sel.forEach(u=>{u.order=null;u.target=null;});break;
     case 'train':{const err=train(G.selBld,v);if(err)toast(err,true);break;}
-    case 'cancel':{const q=G.selBld&&G.selBld.queue[+v];if(q){G.credits[0]+=q.c;G.selBld.queue.splice(+v,1);}break;}
+    case 'cancel':{const q=G.selBld&&G.selBld.queue[+v];if(q){G.credits[0]+=q.c;stAdd(0,'spent',-q.c);G.selBld.queue.splice(+v,1);}break;}
   }
   lastKey='';});
 
@@ -1152,7 +1179,25 @@ function endGame(){G.over=true;G.endAt=0;clearSave();
   else if(G.win){const k='best:'+MAP.id+':'+diff,prev=+loadKey(k)||0;if(!prev||G.t<prev){saveKey(k,Math.round(G.t));best=prev?' New best time.':' First win on this map.';}else best=' Best: '+fmt(prev)+'.';}
   $('#etext').textContent=(G.win?'You destroyed the enemy HQ in ':'Your HQ fell after ')+fmt(G.t)+` as ${FACTIONS[FAC[0]].name} against ${FACTIONS[FAC[1]].name} on ${MAP.name}, ${diff}. Enemy units destroyed: ${G.stats.killed}. Units lost: ${G.stats.lost}.`+best;
   renderMaps();
-  $('#end').classList.add('show');}
+  $('#end').classList.add('show');$('#end').scrollTop=0;renderStats();}
+// statistics table + two charts (army supply, ore gathered) on the end screen
+function renderStats(){const box=$('#estats');if(!G||!G.st){box.innerHTML='';return;}const S=G.st,nm=[FACTIONS[FAC[0]].name,FACTIONS[FAC[1]].name];
+  const rows=[['Units trained','trained',1],['Units lost','lost',-1],['Enemy units destroyed','kills',1],['Buildings built','built',1],['Buildings lost','bldLost',-1],
+    ['Ore gathered','ore',1],['Ore spent','spent',1],['Upgrades researched','ups',1],['Largest army (supply)','peak',1]];
+  const c=(t,k,sgn)=>{const a=Math.round(S[t][k]),b=Math.round(S[1-t][k]);return `<td${(a-b)*sgn>0?' class="win"':''}>${a}</td>`;};
+  box.innerHTML=`<table class="stt"><tr><th></th><th style="color:${COL[0].light}">${G.sandbox?nm[0]:'You'}</th><th style="color:${COL[1].light}">${nm[1]}</th></tr>`+
+    rows.map(([l,k,sg])=>`<tr><td>${l}</td>${c(0,k,sg)}${c(1,k,sg)}</tr>`).join('')+'</table>'+
+    '<div class="chart"><b>Army size over time</b><canvas id="ch1"></canvas></div><div class="chart"><b>Ore gathered over time</b><canvas id="ch2"></canvas></div>';
+  const a=[0,0];for(const e of G.ents)if(e.kind==='unit'&&!e.dead&&!isWorker(e))a[e.team]+=UNIT[e.type].pop;
+  const H=G.hist.concat([[Math.round(G.t),a[0],a[1],Math.round(S[0].ore),Math.round(S[1].ore)]]);
+  drawChart($('#ch1'),H,1);drawChart($('#ch2'),H,3);}
+function drawChart(cv,H,i){if(!cv||!cv.getContext)return;const w=cv.clientWidth||300,h=110,d=Math.min(2,window.devicePixelRatio||1);cv.width=w*d;cv.height=h*d;
+  const x=cv.getContext('2d');if(!x||!x.scale)return;x.scale(d,d);const tMax=Math.max(1,H[H.length-1][0]),vMax=Math.max(1,...H.map(r=>Math.max(r[i],r[i+1])));
+  const P=6,X=t=>P+(w-2*P)*t/tMax,Y=v=>h-P-14-(h-2*P-14)*v/vMax;
+  x.strokeStyle='rgba(239,230,200,.12)';x.lineWidth=1;for(let k=1;k<4;k++){x.beginPath();x.moveTo(P,Y(vMax*k/4));x.lineTo(w-P,Y(vMax*k/4));x.stroke();}
+  [1,0].forEach(tm=>{x.strokeStyle=COL[tm].main;x.lineWidth=2.5;x.lineJoin='round';x.beginPath();H.forEach((r,j)=>{const px=X(r[0]),py=Y(r[i+tm]);j?x.lineTo(px,py):x.moveTo(px,py);});x.stroke();});
+  x.fillStyle='rgba(239,230,200,.7)';x.font='13px "Saira Condensed",sans-serif';x.textAlign='left';x.fillText('0:00',P,h-4);x.textAlign='right';x.fillText(fmt(tMax),w-P,h-4);
+  x.fillText(String(Math.round(vMax)),w-P,P+10);}
 function setPause(p){if(!G||G.over)return;G.paused=p;$('#pause').classList.toggle('show',p);}
 $('#bpause').onclick=()=>setPause(true);
 $('#bresume').onclick=()=>setPause(false);
@@ -1382,24 +1427,26 @@ const GAME_VERSION='0.9.0',SAVE_KEY='save',SAVE_V=1;
 const MIGRATE={
   // 1: d=>{ ...change d.G / d.G.ents from the v1 shape to the v2 shape...; return d; },
 };
-function saveGame(){if(!G||G.over)return;try{const ents=G.ents,homes=G.relicHomes||[];
-  saveKey(SAVE_KEY,JSON.stringify({v:SAVE_V,game:GAME_VERSION,map:mapId,diff,fac:FAC,facId,sandbox:!!G.sandbox,dev:!!G.dev,cam:{x:cam.x,y:cam.y,z:cam.z},G},function(k,v){
+// saveGame() = the autosave; saveGame('slot3') = a manual slot. Returns true when written.
+function saveGame(key){key=typeof key==='string'?key:SAVE_KEY;if(!G||G.over)return false;try{const ents=G.ents,homes=G.relicHomes||[];
+  saveKey(key,JSON.stringify({v:SAVE_V,game:GAME_VERSION,at:Date.now(),map:mapId,diff,fac:FAC,facId,sandbox:!!G.sandbox,dev:!!G.dev,cam:{x:cam.x,y:cam.y,z:cam.z},G},function(k,v){
     if(v&&typeof v==='object'){
       if(v instanceof Uint8Array){let s='';for(let i=0;i<v.length;i+=8192)s+=String.fromCharCode.apply(null,v.subarray(i,i+8192));return{$u8:btoa(s)};}
       if(this!==ents&&v.id&&(v.kind==='unit'||v.kind==='bld'||v.kind==='res'))return{$e:v.id};
       if(this!==homes&&homes.includes(v))return{$h:homes.indexOf(v)};}
-    return v;}));}catch(e){}}
+    return v;}));return loadKey(key)!==null||!!Prefs;}catch(e){return false;}}
 function clearSave(){dropKey(SAVE_KEY);}
 // parse + migrate to the current version; null if there is no usable save (a save from a NEWER build is left untouched)
-function loadSave(){try{let d=JSON.parse(loadKey(SAVE_KEY)||'null');if(!d||!d.G||typeof d.v!=='number'||d.v>SAVE_V)return null;
+function loadSave(key){key=typeof key==='string'?key:SAVE_KEY;try{let d=JSON.parse(loadKey(key)||'null');if(!d||!d.G||typeof d.v!=='number'||d.v>SAVE_V)return null;
   while(d.v<SAVE_V){if(!MIGRATE[d.v])return null;d=MIGRATE[d.v](d);d.v++;}
   return MAPS.some(m=>m.id===d.map)&&FACTIONS[d.fac[0]]&&FACTIONS[d.fac[1]]&&DIFF[d.diff]?d:null;}catch(e){return null;}}
 // a save that cannot be resumed is kept aside (for a bug report) instead of blocking or crashing the game
-function quarantineSave(err){const raw=loadKey(SAVE_KEY);if(raw)saveKey('save.bad',raw);clearSave();G=null;
-  $('#start').classList.add('show');$('#start').scrollTop=0;renderResume();devShowBtn();
+let resumeKey=SAVE_KEY; // where the running match was loaded from
+function quarantineSave(err,key){key=key||resumeKey;const raw=loadKey(key);if(raw)saveKey('save.bad',raw);dropKey(key);G=null;
+  closeSlots();$('#pause').classList.remove('show');$('#start').classList.add('show');$('#start').scrollTop=0;renderResume();devShowBtn();
   toast('That saved match could not be resumed, so it was set aside. Start a new battle.',true);
   try{console.error('save quarantined',err);}catch(e){}}
-function resumeGame(d){
+function resumeGame(d,key){resumeKey=key||SAVE_KEY;
   diff=d.diff;facId=d.facId;sandboxMode=d.sandbox;devMode=d.dev;
   newGame(diff,d.map); // a fresh match on the same map: it supplies defaults for anything this save predates
   const fresh=G,g=d.G,tpl={};fresh.ents.forEach(e=>{tpl[e.kind]=tpl[e.kind]||e;});
@@ -1426,12 +1473,37 @@ function resumeGame(d){
   refreshUnits(0);refreshUnits(1);
   for(const b of G.ents)if(b.kind==='bld'){const mh=BLD[b.type].hp*(FAC[b.team]==='urban'?.8:1);if(b.max!==mh){b.hp=b.hp*mh/b.max;b.max=mh;}}
   rebuildBlockers();fogCanvas();cam.x=d.cam.x;cam.y=d.cam.y;cam.z=d.cam.z;clampCam();
-  lastKey='';toastT=0;toast('Match resumed: '+FACTIONS[FAC[0]].name+' vs '+FACTIONS[FAC[1]].name+'.');}
+  lastKey='';toastT=0;toast('Match resumed: '+FACTIONS[FAC[0]].name+' vs '+FACTIONS[FAC[1]].name+'.');saveGame();} // the autosave now follows this match
 function renderResume(){const d=loadSave();$('#resumerow').hidden=!d;
   if(d)$('#resumeinfo').textContent=(MAPS.find(m=>m.id===d.map).name)+' · '+fmt(d.G.t)+' · '+FACTIONS[d.fac[0]].name+(d.sandbox?' · sandbox':d.dev?' · console':'');}
-$('#bcont').onclick=()=>{const d=loadSave();if(!d){renderResume();return;}
-  try{resumeGame(d);}catch(e){quarantineSave(e);return;}
-  $('#start').classList.remove('show');devShowBtn();backArm();};
+function loadFrom(k){const d=loadSave(k);if(!d){renderResume();renderSlots();return;}
+  try{resumeGame(d,k);}catch(e){quarantineSave(e,k);return;}
+  closeSlots();$('#pause').classList.remove('show');$('#end').classList.remove('show');$('#start').classList.remove('show');devShowBtn();backArm();
+  if(k!==SAVE_KEY)toast('Loaded '+slotName(k)+'.');}
+$('#bcont').onclick=()=>loadFrom(SAVE_KEY);
+
+/* ---------- manual save slots: 5 slots + the autosave (listed under Load) ---------- */
+const SLOTS=5;let slotMode='save',slotArm='',slotArmT=0;
+const slotName=k=>k===SAVE_KEY?'Autosave':'Slot '+k.slice(4);
+function slotInfo(d){const m=MAPS.find(x=>x.id===d.map),at=d.at?new Date(d.at):null,p2=n=>String(n).padStart(2,'0');
+  return[m.name+' · '+fmt(d.G.t)+' · '+FACTIONS[d.fac[0]].name+' vs '+FACTIONS[d.fac[1]].name,
+    d.diff[0].toUpperCase()+d.diff.slice(1)+(d.sandbox?' · Sandbox':d.dev?' · Console':'')+(at?' · Saved '+at.toLocaleDateString(undefined,{day:'numeric',month:'short'})+', '+p2(at.getHours())+':'+p2(at.getMinutes()):'')];}
+function openSlots(mode){slotMode=mode;slotArm='';renderSlots();$('#slots').classList.add('show');$('#slots').scrollTop=0;}
+function closeSlots(){$('#slots').classList.remove('show');}
+function renderSlots(){const save=slotMode==='save';
+  $('#slotsT').textContent=save?'Save game':'Load game';
+  $('#slotsHint').textContent=save?'Pick a slot. A used slot asks for a second tap before it is overwritten.':'Pick a saved match to continue it.';
+  const keys=(save?[]:[SAVE_KEY]).concat(Array.from({length:SLOTS},(_,i)=>'slot'+(i+1)));let h='';
+  for(const k of keys){const d=loadSave(k),inf=d&&slotInfo(d),armed=save&&slotArm===k;
+    h+=`<button class="b slot${armed?' on':''}" data-k="${k}"${!save&&!d?' disabled':''}><b>${slotName(k)}${armed?' · tap again to overwrite':''}</b>${inf?`<span>${inf[0]}</span><span>${inf[1]}</span>`:`<span>${loadKey(k)?'Saved by a newer version of the game':'Empty'}</span>`}</button>`;}
+  $('#slotlist').innerHTML=h;}
+$('#slotlist').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const k=b.dataset.k;
+  if(slotMode==='load'){loadFrom(k);return;}
+  if(loadKey(k)!==null&&(slotArm!==k||performance.now()-slotArmT>4000)){slotArm=k;slotArmT=performance.now();renderSlots();return;}
+  if(saveGame(k)){closeSlots();toast('Saved to '+slotName(k)+'.');}else toast('Could not save here. Storage may be full.',true);});
+$('#bsave').onclick=()=>{if(G&&!G.over)openSlots('save');};
+$('#bload').onclick=$('#bload2').onclick=()=>openSlots('load');
+$('#bslotsback').onclick=closeSlots;
 // Android app: if the OS cleared the WebView's localStorage (or its origin changed), copy saved keys back from Preferences
 function restorePrefs(){if(!Prefs)return;Prefs.keys().then(async r=>{let n=0;
   for(const k of r.keys)if(loadKey(k)===null){const v=(await Prefs.get({key:k})).value;if(v!=null){try{localStorage.setItem(k,v);n++;}catch(e){}}}
@@ -1441,6 +1513,7 @@ renderResume();restorePrefs();
 /* ---------- Back button (Android hardware/gesture Back, browser Back): never leaves a match by accident ---------- */
 // match running -> Pause menu; Pause menu -> resume; end screen -> main menu; console open -> close it. On the main menu Back exits.
 function onBack(){
+  if($('#slots').classList.contains('show')){closeSlots();return true;}
   if(devEl.classList.contains('show')){devOpen(false);return true;}
   if($('#start').classList.contains('show'))return false;
   if($('#pause').classList.contains('show')){setPause(false);return true;}
