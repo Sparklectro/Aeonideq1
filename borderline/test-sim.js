@@ -137,4 +137,24 @@ facId = 'urban'; sandboxMode = false; newGame('normal', 'delta'); FAC[1] = 'sky'
     if (g.length < 3) break; const cx = g.reduce((a,u)=>a+u.x,0)/g.length, cy = g.reduce((a,u)=>a+u.y,0)/g.length, dc = Math.hypot(cx-ehq.x, cy-ehq.y);
     d.forEach(u => { ahead = Math.max(ahead, dist(u, ehq) - dc); }); }
   console.log('wave drones max lead over riflemen', Math.round(ahead), 'px (cohesive if < 250)', ahead < 250 ? 'ok' : 'SPREAD'); }
+
+// modes: the console exists only in 'Battle with console' and Sandbox
+{ const r = []; for (const [sb, dv] of [[false,false],[false,true],[true,false]]) { sandboxMode = sb; devMode = dv; newGame('normal','crossroads'); r.push(devAllowed()); }
+  sandboxMode = false; devMode = false; console.log('console allowed in normal/console/sandbox match', r.join('/')); }
+
+// save/resume: save mid-match, play a different match, resume: same state, links rebuilt, keeps running, cleared at the end
+{ const store = {}; localStorage.getItem = k => k in store ? store[k] : null; localStorage.setItem = (k,v) => { store[k] = String(v); }; localStorage.removeItem = k => { delete store[k]; };
+  facId = 'shadow'; newGame('normal', 'delta'); for (let i = 0; i < 60*120; i++) update(1/60);
+  G.sel = G.ents.filter(e => e.team===0 && e.kind==='unit').slice(0, 3); G.selBld = G.ents.find(e => e.team===0 && e.type==='hq');
+  const before = JSON.stringify(snapshot()), seenB = G.fog.seen.join(''), nB = G.ents.length, cam0 = cam.x;
+  saveGame(); const kb = Math.round(store.save.length / 1024);
+  facId = 'urban'; newGame('easy', 'canyon'); for (let i = 0; i < 60; i++) update(1/60);
+  resumeGame(loadSave());
+  const after = JSON.stringify(snapshot()), ids = new Set(G.ents); let broken = 0;
+  for (const e of G.ents) { const o = e.order; if (o && o.target && !ids.has(o.target)) broken++; if (e.target && !ids.has(e.target)) broken++; if (e.kind==='res' && e.home && !G.relicHomes.includes(e.home)) broken++; }
+  G.sel.forEach(u => { if (!ids.has(u)) broken++; }); if (!ids.has(G.selBld)) broken++;
+  const same = before === after && seenB === G.fog.seen.join('') && nB === G.ents.length && cam.x === cam0 && mapId === 'delta' && FAC[0] === 'shadow';
+  let err = 'ok'; try { for (let i = 0; i < 60*40 && !G.over; i++) update(1/60); } catch (e) { err = e.message; }
+  const hq1 = G.ents.find(e => e.team===1 && e.type==='hq'); if (hq1) kill(hq1); for (let i = 0; i < 60*3; i++) update(1/60);
+  console.log('save', kb + 'KB | resumed identical', same, '| broken links', broken, '| 40s after resume', err, '| save cleared at game end', !('save' in store)); }
 `);

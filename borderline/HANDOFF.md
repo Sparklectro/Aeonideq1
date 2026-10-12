@@ -14,13 +14,15 @@ A single-file, touch-first RTS that runs in any mobile browser. This document is
 
 **The owner's standing rules**
 
-- Stay single-file: all markup, CSS and JS inside `border-line-rts.html`. No new runtime dependencies, no framework, no build step. It will be wrapped with Capacitor for Google Play and must run offline in an Android WebView.
+- Stay single-file: all markup, CSS and JS inside `border-line-rts.html`. No new runtime dependencies, no framework, no build step. It will be wrapped with Capacitor for Google Play and must run offline in an Android WebView (the font is embedded; keep it that way).
 - Smallest change that fully works. Surgical edits; keep the flat `G.ents` array, the global `G`, the `loop()/update(dt)/draw()` structure and the function layout below. Do not reformat untouched code.
 - Touch-first. Everything must work on a phone, inside the safe-area insets, with the existing HUD/minimap/panel layout. Check layouts at 375px wide.
 - Do not regress the six factions or their balance; keep the fictional faction names.
 - Before saying something works, run `test-sim.js` (see *Testing*) and report its real output. Add a check there for anything new.
 - Ask first before: adding a dependency or build step, splitting the file, changing the data model shape, or anything that affects save-game compatibility.
-- The owner tests on a phone through the artifact and gives feedback in plain language (often in Turkish). They are not reading the code.
+- The owner tests on a phone through the artifact and gives feedback in plain language (sometimes Turkish; replies in English). They are not reading the code. Publish to the same game link after every change.
+- The dev console must never appear in a normal match: only in *Battle with console* and *Sandbox*.
+- Android packaging: the owner wants every step explained as it is reached (Capacitor setup, Android Studio, app ID, signing key, API 36, icon/splash, AAB, Play Console, closed testing 12 testers × 14 days, Data Safety, privacy policy page on e.g. GitHub Pages). Not started; the game is not finished.
 
 **Done so far**
 
@@ -31,6 +33,7 @@ A single-file, touch-first RTS that runs in any mobile browser. This document is
 - **Hacker made expensive, at the owner's request:** costs 550 ore and needs the new HQ research **Hacker cell** (250 ore, 45 s) first; *Exploit kit* / *Burner rigs* stay hidden until then. AI trains at most 1 (`TUNABLES.ai.hackers`).
 - **Faction balance pass**, measured with the rewritten `balance.js` (real AI on both sides). Before → after, 120 games: Urban 73→48%, Smugglers 93→55%, Shadow 63→48%, Iron 27→55%, Mountain 27→45%, Sky 7→48%. Changes: Urban riflemen 42→54 ore (−10%); Smugglers ore bonus +25%→+10% and Cargo truck carry 20→12; Shadow speed +15%→+10%; Armed pickup hp 150→175, dmg 6→8; Sky drones 65→55 ore; Sky AI barracks mix 30% drones / 10% kamikaze / 60% riflemen.
 - **AI wave cohesion** (the real Sky fix): a marching AI wave keeps its drones over its ground units (end of `aiTick`), so fast flyers no longer arrive alone and die one by one. Applies to every AI faction, so the enemy AI is slightly tougher too.
+- **Second batch (owner decisions):** three start modes (*Start battle* without console, *Battle with console*, *Sandbox: AI vs AI*); Saira Condensed embedded as base64 woff2 (no network request at all); fullscreen button removed (Android handles it); Back button opens Pause (see *Back button*); **save/resume** (see *Save / resume*).
 - **Tools:** `balance.js` now plays AI vs AI round robin on 4 parallel workers and reports Hacker stats, with a `nohack` A/B switch; `clash.js` now fights equal-ore armies, every faction vs every other.
 
 **Open questions the owner has not answered yet**
@@ -41,7 +44,7 @@ A single-file, touch-first RTS that runs in any mobile browser. This document is
 - **Fog of war:** the AI still sees everything (it never had vision rules). Fog edge softness and darkness (`TUNABLES.fog`) not yet seen by the owner.
 - **Units walk over ore/oil** now (trade-off of the no-wedging fix). The owner has not commented on the look.
 
-**Next on the backlog:** save/resume (see *Backlog*).
+**Next on the backlog:** monetization decision, audio/haptics settings + tutorial, then Android packaging (see *Backlog* and *Packaging*).
 
 ---
 
@@ -55,7 +58,7 @@ A single-file, touch-first RTS that runs in any mobile browser. This document is
 
 ## Architecture
 
-One HTML file with three parts: `<style>`, a little static DOM (HUD, minimap, bottom panel, start/pause/end sheets), and one `<script>`.
+One HTML file with three parts: `<style>` (the first `<style>` block is the embedded Saira Condensed font, ~130 KB of base64; SIL Open Font License), a little static DOM (HUD, minimap, bottom panel, start/pause/end sheets), and one `<script>`. The file makes no network requests.
 
 - **Rendering:** a full-screen `<canvas>`, redrawn every frame. World is drawn in world-space via a camera transform (`cam.x/y/z`); HUD and the selection box are drawn in screen-space. A second small canvas is the minimap.
 - **Game loop:** `loop()` at the bottom. Fixed-ish timestep via `requestAnimationFrame`; `dt` is clamped to 50ms so a backgrounded tab can't explode the physics. `update(dt)` advances simulation, `draw()` renders, HUD/minimap refresh on throttled timers.
@@ -89,7 +92,8 @@ One HTML file with three parts: `<style>`, a little static DOM (HUD, minimap, bo
 | Panel UI | `btn`, `panelKey`, `renderPanel`, `livePanel`, `grpBtns`, panel click handler |
 | Menus/flow | `endGame`, `setPause`, `renderFacs`, `renderMaps`, `thumb`, start/pause/end wiring |
 | Sound | `SND` (sounds as stacks of voices), `audioInit` (context, noise buffers, reverb, wind bed), `sndVoice`, `sfx(kind,x,y,pitch,length)`, `setMute`; counters in `sfxN` |
-| Persistence | `loadKey`/`saveKey` (localStorage: last map, difficulty, faction, best times) |
+| Persistence | `loadKey`/`saveKey` (localStorage: last map, difficulty, faction, best times, mute); match save: `saveGame`, `loadSave`, `resumeGame`, `clearSave`, `renderResume` |
+| Modes / console gate / Back | `startMode`, `devAllowed`, `devShowBtn`, `onBack`, `backArm` |
 
 ---
 
@@ -131,6 +135,18 @@ One HTML file with three parts: `<style>`, a little static DOM (HUD, minimap, bo
 Faction effects are applied in `unitMaxHp`, `unitSpd`, `costOf`, `trainsFor`, `trainTime`, `fire` (ambush), `updStealth`, `updSaboteur`, `blast`. To rebalance, those are the only places to touch.
 
 ---
+
+## Game modes and the console
+
+Start screen: **Start battle** (normal match, no console), **Battle with console** (same match, `G.dev`/`devMode` = true, the `»_` button and F2 work), **Sandbox: AI vs AI** (`G.sandbox`, console too). `devAllowed()` is the single gate: `DEV && G && (G.sandbox || G.dev)` and not on the menu. `DEV=false` hides *Battle with console* and the console everywhere. Restart / Play again keep the current mode.
+
+## Save / resume
+
+The match is written to localStorage key `save` every 10 s of play, whenever the page is hidden (`visibilitychange`, `pagehide`, Capacitor `pause`) and when leaving to the menu; it is deleted when the match ends or a new battle starts. On launch, if a save exists, a **Resume match** button sits at the top of the start screen (map · time · faction · mode). `saveGame()` serializes `G` with a JSON replacer: entity links anywhere (orders, targets, shells, `G.sel`, `G.selBld`, `relic.home.live`) become `{$e:id}`, relic homes `{$h:index}`, fog grids base64 `{$u8}`; `resumeGame()` rebuilds them, drops orders whose target died, then rebuilds nav and the fog canvas. Also saved: map, difficulty, both factions, mode, camera. A mid-match save is ~75 KB. **Compatibility:** `SAVE_V` is checked on load; bump it whenever entity fields or `G` change shape, and old saves are ignored instead of breaking. The data model itself did not change (only `G.dev` was added).
+
+## Back button
+
+`onBack()`: console open → close it; match running → Pause menu; Pause menu → resume; end screen → main menu; main menu → leave. In the packaged app it is wired to the Capacitor App plugin (`Capacitor.Plugins.App` `backButton`, which needs `@capacitor/app` installed; on the main menu it saves and calls `exitApp()`). In a browser, starting or resuming a match pushes one history entry so Back lands on `popstate` instead of leaving the page.
 
 ## Fog of war
 
@@ -178,7 +194,7 @@ Keep each map's run short (≈40 simulated seconds) — full-length games across
 
 `test-sim.js` reads the extracted script from `/tmp/g.js` (on Windows, Node resolves that to `\tmp\g.js` on the current drive — create the folder once). Besides the per-map crash run it checks: relic placement (random, near-equidistant), engineer repair, hacker prerequisites and both hacker jobs, level III lock, a sandbox match with the AI on both sides, units escaping ore/oil clusters, and which sounds fire (with a fake audio context) plus mute.
 
-Also checked: fog of war (hidden at start, spotted by a scout, buildings remembered, units not, off in sandbox), Hacker cost + Hacker cell research gate, and AI wave cohesion (drones stay over their riflemen).
+Also checked: console availability per mode, save → play another match → resume (identical state, no broken links, keeps running, save cleared at the end), fog of war (hidden at start, spotted by a scout, buildings remembered, units not, off in sandbox), Hacker cost + Hacker cell research gate, and AI wave cohesion (drones stay over their riflemen).
 
 Other tools, all reading `./border-line-rts.html` directly: `node clash.js 20` (equal-ore armies, every faction vs every other: combat value per ore only, ~10 s), `node balance.js 8` (whole games, real AI on both sides, round robin on 4 workers: 120 games in ~3 min; the trusted balance number; prints a Hacker table; add `nohack` to A/B Hackers), `node console.js ...` (drives the in-game console headlessly). Use 8 games per pairing: below that, the noise between runs is ±20 points. `clash.js` and `balance.js` use `Math.random`, so two runs never match exactly; to compare before/after a change, preload a seeded `Math.random` with `node -r ./seed.js clash.js 50`.
 
@@ -202,7 +218,7 @@ In a browser, the audio engine can be measured without ears: swap `window.AudioC
 1. ~~**Balance config block**~~ — done: see `TUNABLES` under *Data model*.
 2. ~~**Sound**~~ — done: synthesized in `sfx` from the `SND` table: each sound is a stack of voices (filtered white/brown noise + oscillators) with an outdoor convolution reverb, a compressor and a quiet wind bed. Guns and explosions are noise-only through a distortion bus (a pitched thump under them sounds like a drum — avoid): fire = clipped crack + darkening report tail, shell = cannon roar. Deaths are chosen in `kill`: die = infantry cry (sawtooth through moving vowel formants, `bp`), vboom = vehicle (blast + cook-off + ringing metal), dboom = drone (pop + fizz), bboom = building collapse (three blasts + rubble); boom = generic blast (shell impact, kamikaze). ready = snare rat-tat-TAT + low brass stab, vready = same with an engine rev (vehicles), built = snare roll + four-note fanfare, upg = repeated note + fifth. alert = siren, relic = bell. Helpers: `brass`, `snare`, `sndBlast`, `debris`. Context starts on the first touch, suspends when the tab is hidden; world sounds only play when on screen. Mute: Pause menu button or console `mute` (saved in localStorage `mute`).
 3. ~~**Fog of war**~~ — done: see *Fog of war*. Possible follow-up: make the AI obey vision too.
-4. **Save/resume** — serialize `G` to localStorage so a backgrounded match survives. Entities are plain objects; watch the `order.res`/`target`/`res` cross-references (store ids, rehydrate).
+4. ~~**Save/resume**~~ — done: see *Save / resume*.
 5. **Monetization hooks** — free base + unlockable factions/maps, or a one-time unlock. Decide before production; it shapes the store screen.
 6. **Audio/haptics settings + a brief tutorial** for first launch.
 7. **More content** — extra maps (just add to `MAPS`), a 5th building, per-faction unit skins.
@@ -222,7 +238,7 @@ In a browser, the audio engine can be measured without ears: swap `window.AudioC
 
 ## In-game dev console
 
-The game ships with a developer console for scripting scenarios live — the same control surface as `test-sim.js`, but inside the running game. Toggle it with the **`»_`** button (top-left under the top bar, also on the start screen) or **F2** (also `` ` `` / `~` / `"` when you're not typing in it). It runs any JavaScript in game scope, plus these shortcuts:
+The game ships with a developer console for scripting scenarios live — the same control surface as `test-sim.js`, but inside the running game. Toggle it with the **`»_`** button (top-left under the top bar, console modes only) or **F2** (also `` ` `` / `~` / `"` when you're not typing in it). It runs any JavaScript in game scope, plus these shortcuts:
 
 ```
 help                       list commands
@@ -246,7 +262,7 @@ clear / dev off
 
 Anything not matching a command runs as JS, e.g. `G.credits[0]=9999`, `spawnUnit('tank',0,PHQ.x,PHQ.y)`, `FAC[1]='iron'`. Arrow-up/down recalls history.
 
-**Release builds:** set `DEV=false` near the top of the script (or run `dev off`) to hide the console before shipping to Google Play. The `fast` multiplier runs `update()` N times per frame via `G.timeScale`, applied in `loop()`.
+**Where it appears:** only in *Battle with console* and *Sandbox* (see *Game modes and the console*); never in a normal battle or on the menus. `DEV=false` near the top of the script removes the console modes entirely. The `fast` multiplier runs `update()` N times per frame via `G.timeScale`, applied in `loop()`.
 
 ### Live tuning + Claude Code review
 
