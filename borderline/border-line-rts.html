@@ -534,6 +534,8 @@ function newGame(d,mid){
 function popCap(team){let c=0;for(const e of G.ents)if(e.kind==='bld'&&e.team===team&&e.built&&!e.dead)c+=BLD[e.type].pop||0;return Math.min(POPMAX,c);}
 function popUsed(team){let c=0;for(const e of G.ents){if(e.dead||e.team!==team)continue;if(e.kind==='unit')c+=UNIT[e.type].pop;else if(e.kind==='bld')for(const q of e.queue)c+=UNIT[q.type].pop;}return c;}
 function hasBuilt(team,type){return G.ents.some(e=>e.kind==='bld'&&e.team===team&&e.type===type&&e.built&&!e.dead);}
+// 'All army': fighting units only. Hackers stay on their oil rig / hack job (workers are excluded too).
+function armyOf(team){return G.ents.filter(e=>e.kind==='unit'&&e.team===team&&!e.dead&&!isWorker(e)&&!UNIT[e.type].hacker);}
 function hasUnit(team,type){return G.ents.some(e=>e.kind==='unit'&&e.team===team&&!e.dead&&(type==='worker'?isWorker(e):e.type===type));}
 
 function train(b,type){const team=b.team,s=UNIT[type],cost=costOf(team,type);
@@ -1122,7 +1124,7 @@ $('#panel').addEventListener('click',e=>{const b=e.target.closest('button');if(!
     case 'place':{const s=BLD[v];if(s.req&&!hasBuilt(0,s.req)){toast('Build a Barracks first.',true);break;}
       if(G.credits[0]<s.cost){toast('Not enough ore. You need '+s.cost+'.',true);break;}G.placing=v;G.sel=[];G.selBld=null;G.buildMenu=false;break;}
     case 'cancelplace':G.placing=null;break;
-    case 'army':G.sel=G.ents.filter(e=>e.kind==='unit'&&e.team===0&&!isWorker(e));G.selBld=null;if(!G.sel.length)toast('You have no army yet. Build a Barracks.');break;
+    case 'army':G.sel=armyOf(0);G.selBld=null;if(!G.sel.length)toast('You have no army yet. Build a Barracks.');break;
     case 'idle':G.sel=G.ents.filter(e=>e.kind==='unit'&&e.team===0&&isWorker(e)&&!e.order);G.selBld=null;if(!G.sel.length)toast('Every worker is busy.');else toast('Tap an ore crystal to put them to work.');break;
     case 'hack':{const hs=G.sel.filter(u=>u.type==='hacker');hs.forEach(u=>{u.order={type:'hack'};u.target=null;u.path=null;});toast(hs.length+' hacker'+(hs.length>1?'s':'')+' draining enemy ore. Stay hidden: they stop if you move them.');break;}
     case 'research':{const err=research(G.selBld,v);if(err)toast(err,true);else toast(upName(0,v)+': '+upDesc(0,v)+'.');break;}
@@ -1349,7 +1351,7 @@ function runCmd(raw){const line=raw.trim();if(!line)return;logC('> '+line,'cmd')
   if(c==='give'){const n=+a[1]||0,t=+a[2]||0;G.credits[t]+=n;logC('+'+n+' ore to '+(t?'enemy':'you'),'sys');return;}
   if(c==='spawn'){cmdSpawn(a[1],a[2],a[3]);return;}
   if(c==='army'||c==='attack'){const hq=G.ents.find(e=>e.team===1&&e.type==='hq');if(!hq)return logC('no enemy HQ','err');
-    const us=G.ents.filter(e=>e.kind==='unit'&&e.team===0&&!isWorker(e));us.forEach(u=>{u.order={type:'attack',target:hq};u.target=hq;});logC('sent '+us.length+' units at the enemy HQ','sys');return;}
+    const us=armyOf(0);us.forEach(u=>{u.order={type:'attack',target:hq};u.target=hq;});logC('sent '+us.length+' units at the enemy HQ','sys');return;}
   if(c==='research'){const id=a[1],t=+a[2]||0;if(!UPG[id])return logC('unknown upgrade: '+id,'err');G.up[t][id]=(G.up[t][id]||0)+1;refreshUnits(t);logC((t?'enemy':'you')+' now has '+upName(t,id)+' lvl '+G.up[t][id],'sys');return;}
   if(c==='faction'||c==='enemy'){const id=a[1],side=c==='enemy'?1:0;if(!FACTIONS[id])return logC('unknown faction: '+id,'err');FAC[side]=id;COL[side]=FACTIONS[id].col;if(side===0)facId=id;refreshUnits(side);logC((side?'enemy':'you')+' = '+FACTIONS[id].name,'sys');return;}
   if(c==='map'){const id=a[1];if(!MAPS.some(m=>m.id===id))return logC('unknown map: '+id,'err');newGame(diff,id);logC('restarted on '+id,'sys');return;}

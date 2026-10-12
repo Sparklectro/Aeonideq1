@@ -189,4 +189,9 @@ facId = 'urban'; sandboxMode = false; newGame('normal', 'delta'); FAC[1] = 'sky'
   const bad = JSON.parse(base); bad.G.ents = 'garbage'; store.save = JSON.stringify(bad);
   const ce = console.error; console.error = () => {}; try { resumeGame(loadSave()); } catch (e) { quarantineSave(e); } console.error = ce;
   console.log('migration v0->v1 ran', !!(dm && dm.migrated && dm.v === SAVE_V), '| newer-build save ignored and kept', newer, '| broken save set aside', 'save.bad' in store && !('save' in store) && G === null); }
+
+// 'All army' leaves working hackers (and workers) alone
+facId = 'urban'; sandboxMode = false; devMode = false; newGame('normal', 'crossroads');
+{ const hk = spawnUnit('hacker', 0, PHQ.x + 60, PHQ.y); hk.order = { type: 'hack' }; spawnUnit('engineer', 0, PHQ.x + 80, PHQ.y);
+  const sel = armyOf(0); console.log('All army: hacker included', sel.includes(hk), '| workers included', sel.some(isWorker), '| picks', [...new Set(sel.map(u => u.type))].join(','), '| hacker still hacking', hk.order.type); }
 `);
