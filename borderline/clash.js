@@ -1,7 +1,8 @@
 // Border Line — combat clash benchmark.
-// Isolates each faction's fighting strength: equal armies, no economy, fight to the death.
-// Each faction (12 riflemen + its signature unit) vs the Urban "vanilla" baseline.
-// Resolves in seconds, so it runs fast anywhere.
+// Isolates each faction's fighting strength per ore: no economy, fight to the death.
+// Each side spends the same ore budget at its own prices: half on riflemen, half on its
+// signature units (tanks / pickups / drones+kamikazes). Every faction fights every other.
+// Smugglers' +25% ore is economy, so it does not show here (see balance.js).
 //   node clash.js            (20 trials each)
 //   node clash.js 50
 const fs = require('fs');
@@ -21,46 +22,42 @@ const code = html.match(/<script>([\s\S]*)<\/script>/)[1];
 
 const runner = `
 ;(function(){
-  const TRIALS = ${TRIALS};
-  const SIG = { mountain:'soldier', urban:'soldier', sky:'drone', smugglers:'soldier', iron:'technical', shadow:'soldier' };
+  const TRIALS = ${TRIALS}, BUDGET = 1200;
+  const SIG = { mountain:['tank'], urban:['tank'], sky:['drone','kamikaze'], smugglers:['tank'], iron:['technical'], shadow:['tank'] };
 
   function armyFor(fac, team, cx, cy){
     FAC[team] = fac; COL[team] = FACTIONS[fac].col;
-    // 12 riflemen + 3 of the faction's signature unit, in a loose block
-    const list = []; for(let i=0;i<12;i++) list.push('soldier'); for(let i=0;i<3;i++) list.push(SIG[fac]);
-    list.forEach((t,i)=>{ const u = spawnUnit(t, team, cx + (i%4)*22 - 33, cy + Math.floor(i/4)*22 - 44); });
+    const list = []; let inf = BUDGET/2, sig = BUDGET/2, k = 0;
+    while(inf >= costOf(team,'soldier')){ list.push('soldier'); inf -= costOf(team,'soldier'); }
+    sig += inf;
+    for(;;){ const t = SIG[fac][k++ % SIG[fac].length]; if(sig < costOf(team,t)) break; list.push(t); sig -= costOf(team,t); }
+    const dir = team ? 1 : -1;
+    list.forEach((t,i)=>spawnUnit(t, team, cx + dir*Math.floor(i/6)*24, cy + (i%6)*24 - 60));
+    return list.length;
   }
 
   function clash(facA, facB){
     facId = facA; newGame('normal','crossroads');
     G.ents.length = 0; G.nextId = 1; G.shells.length = 0; G.fx.length = 0; // clear the world, keep map/nav
-    armyFor(facA, 0, 700, 900);
-    armyFor(facB, 1, 900, 900);
-    for(let i=0;i<60*60;i++){
-      update(1/60);
-      const a = G.ents.filter(e=>e.kind==='unit'&&e.team===0&&!e.dead).length;
-      const b = G.ents.filter(e=>e.kind==='unit'&&e.team===1&&!e.dead).length;
-      if(a===0 || b===0) return { win: b===0 && a>0, aLeft:a, bLeft:b };
-    }
-    const a = G.ents.filter(e=>e.kind==='unit'&&e.team===0&&!e.dead).length;
-    const b = G.ents.filter(e=>e.kind==='unit'&&e.team===1&&!e.dead).length;
-    return { win: a>b, aLeft:a, bLeft:b };
+    armyFor(facA, 0, 1080, 1200); armyFor(facB, 1, 1320, 1200);
+    G.ents.forEach(u=>{ u.order = { type:'move', x: u.team ? 900 : 1500, y: u.y }; }); // advance; units fight what they meet
+    const left = t => G.ents.filter(e=>e.kind==='unit'&&e.team===t&&!e.dead).length;
+    for(let i=0;i<60*90;i++){ update(1/60); const a = left(0), b = left(1); if(a===0 || b===0) break; }
+    const a = left(0), b = left(1);
+    return a===b ? .5 : a>b ? 1 : 0;
   }
 
-  const facs = Object.keys(FACTIONS);
-  console.log('Border Line clash — each faction (12 riflemen + 3 signature) vs Urban baseline, ' + TRIALS + ' trials\\n');
-  const rows = [];
-  for(const f of facs){
-    let wins=0, survSum=0;
-    for(let i=0;i<TRIALS;i++){ const r = clash(f, 'urban'); if(r.win) wins++; survSum += r.aLeft; }
-    rows.push({ fac: FACTIONS[f].name, wr: Math.round(wins/TRIALS*100), surv: (survSum/TRIALS).toFixed(1) });
-  }
-  rows.sort((a,b)=>b.wr-a.wr);
-  const pad=(s,n)=>(s+'').padEnd(n);
-  console.log(pad('Faction',16)+pad('Win% vs Urban',16)+'Avg survivors');
-  console.log('-'.repeat(44));
-  for(const r of rows) console.log(pad(r.fac,16)+pad(r.wr+'%',16)+r.surv+' / 15');
-  console.log('\\nUrban is the baseline (~50%). Higher = stronger head-to-head fighters.');
+  const facs = Object.keys(FACTIONS), n = facs.length, S = {}, P = {}, M = {};
+  facs.forEach(f=>{ S[f]=0; P[f]=0; M[f]={}; });
+  console.log('Border Line clash — equal ' + BUDGET + ' ore armies, every faction vs every other, ' + TRIALS + ' trials per pairing (sides swapped)\\n');
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){ const a=facs[i], b=facs[j]; let sa=0;
+    for(let t=0;t<TRIALS;t++){ sa += t%2 ? 1-clash(b,a) : clash(a,b); }
+    S[a]+=sa; S[b]+=TRIALS-sa; P[a]+=TRIALS; P[b]+=TRIALS; M[a][b]=Math.round(sa/TRIALS*100); M[b][a]=100-M[a][b]; }
+  const pad=(s,n)=>(s+'').padEnd(n), sh=f=>FACTIONS[f].name.split(' ')[0].slice(0,7);
+  console.log(pad('Faction',16)+pad('Win%',7)+' win% vs: '+facs.map(f=>pad(sh(f),8)).join(''));
+  console.log('-'.repeat(32+8*n));
+  facs.slice().sort((x,y)=>S[y]/P[y]-S[x]/P[x]).forEach(f=>console.log(pad(FACTIONS[f].name,16)+pad(Math.round(S[f]/P[f]*100)+'%',7)+pad('',10)+facs.map(g=>pad(g===f?'-':M[f][g],8)).join('')));
+  console.log('\\n50% = even fighting value per ore.');
 })();
 `;
 

@@ -74,7 +74,9 @@ console.log('hacker before engineer:', train(hq0, 'hacker'));
 const eng = spawnUnit('engineer', 0, hq0.x + 60, hq0.y); const hp0 = hq0.hp;
 for (let i = 0; i < 60*8; i++) update(1/60);
 console.log('engineer repaired HQ +' + Math.round(hq0.hp - hp0), 'order', eng.order && eng.order.type);
-console.log('hacker after engineer:', train(hq0, 'hacker') || 'queued');
+console.log('hacker after engineer, no research:', train(hq0, 'hacker'), '| research offered', upsFor(0,'hq').includes('hackNet'), 'kit hidden', !upsFor(0,'hq').includes('hackKit'));
+G.up[0].hackNet = 1; const crH = G.credits[0];
+console.log('hacker after Hacker cell:', train(hq0, 'hacker') || 'queued', 'cost', Math.round(crH - G.credits[0]), '| kit offered', upsFor(0,'hq').includes('hackKit'));
 G.ents.filter(e => isWorker(e)).forEach(e => e.dead = true); update(1/60); hq0.queue.length = 0;
 const oil = G.ents.find(e => e.rtype === 'oil'), hk = spawnUnit('hacker', 0, oil.x + 30, oil.y);
 hk.order = { type:'rig', res: oil }; const c0 = G.credits[0], a0 = oil.amount;
@@ -112,4 +114,27 @@ for (let i = 0; i < 60*240 && !G.over; i++) update(1/60);
 console.log('sounds played', JSON.stringify(sfxN));
 setMute(true); const nb = JSON.stringify(sfxN); for (let i = 0; i < 60*20 && !G.over; i++) update(1/60);
 console.log('muted stays silent', nb === JSON.stringify(sfxN)); setMute(false); AC = null; sandboxMode = false;
+
+// fog of war: enemy hidden at start, spotted by a scout, buildings remembered, units not; off in sandbox
+facId = 'urban'; sandboxMode = false; newGame('normal', 'crossroads'); G.ai.t = -1e9;
+{ const ehq = G.ents.find(e => e.team===1 && e.type==='hq'), esol = G.ents.find(e => e.team===1 && e.type==='soldier');
+  const before = [fogOn(), seen0(ehq), seen0(esol), vis0(PHQ)].join('/');
+  const sc = spawnUnit("soldier", 0, ehq.x - 100, ehq.y + 100); sc.order = null; G.ai.t = -1e9;
+  for (let i = 0; i < 30; i++) update(1/60);
+  const near = [seen0(ehq), seen0(esol)].join('/');
+  sc.dead = true; for (let i = 0; i < 30; i++) update(1/60);
+  const seenPct = Math.round(G.fog.seen.reduce((a,v)=>a+(v>0),0) / G.fog.seen.length * 100), gone = [seen0(ehq), !seen0(esol)].join('/');
+  sandboxMode = true; newGame('normal', 'crossroads'); const sb = fogOn(); sandboxMode = false;
+  console.log('fog on/enemyHQ/enemyUnit/ownHQ at start', before, '| scout near', near, '| scout gone: HQ remembered/unit hidden', gone, '| explored', seenPct + '%', '| sandbox fog', sb); }
+
+// AI wave cohesion: a marching wave's drones stay over its riflemen instead of racing ahead
+facId = 'urban'; sandboxMode = false; newGame('normal', 'delta'); FAC[1] = 'sky';
+{ const ehq = G.ents.find(e => e.team===1 && e.type==='hq'), ws = [];
+  for (let i = 0; i < 6; i++) ws.push(spawnUnit('soldier', 1, ehq.x - 60 - i*12, ehq.y + 40));
+  for (let i = 0; i < 3; i++) ws.push(spawnUnit('drone', 1, ehq.x - 60, ehq.y + 70 + i*12));
+  ws.forEach(u => { u.wave = true; }); let ahead = 0;
+  for (let i = 0; i < 60*25; i++) { update(1/60); const g = ws.filter(u => !u.dead && !isFly(u)), d = ws.filter(u => !u.dead && isFly(u) && !u.target);
+    if (g.length < 3) break; const cx = g.reduce((a,u)=>a+u.x,0)/g.length, cy = g.reduce((a,u)=>a+u.y,0)/g.length, dc = Math.hypot(cx-ehq.x, cy-ehq.y);
+    d.forEach(u => { ahead = Math.max(ahead, dist(u, ehq) - dc); }); }
+  console.log('wave drones max lead over riflemen', Math.round(ahead), 'px (cohesive if < 250)', ahead < 250 ? 'ok' : 'SPREAD'); }
 `);

@@ -4,7 +4,7 @@ A single-file, touch-first RTS that runs in any mobile browser. This document is
 
 ---
 
-## Start here (status: 9 October 2026)
+## Start here (status: 12 October 2026)
 
 **Where the project lives**
 
@@ -26,14 +26,22 @@ A single-file, touch-first RTS that runs in any mobile browser. This document is
 
 `TUNABLES` balance block · sandbox (AI plays both sides) with named AI strategies · game-speed button · level III upgrades after 8:00 · Engineer · Hacker · random relic spots · stuck-worker fix and tap-HQ-to-deliver · AI waves intercept passing armies · synthesized sound engine with mute · sticky Back button in the panel · target ring on attack/repair orders · units no longer collide with ore/oil.
 
+**12 October 2026 session (cloud):**
+- **Fog of war** for your side (see *Fog of war* below). Off in sandbox; console `fog on|off`.
+- **Hacker made expensive, at the owner's request:** costs 550 ore and needs the new HQ research **Hacker cell** (250 ore, 45 s) first; *Exploit kit* / *Burner rigs* stay hidden until then. AI trains at most 1 (`TUNABLES.ai.hackers`).
+- **Faction balance pass**, measured with the rewritten `balance.js` (real AI on both sides). Before → after, 120 games: Urban 73→48%, Smugglers 93→55%, Shadow 63→48%, Iron 27→55%, Mountain 27→45%, Sky 7→48%. Changes: Urban riflemen 42→54 ore (−10%); Smugglers ore bonus +25%→+10% and Cargo truck carry 20→12; Shadow speed +15%→+10%; Armed pickup hp 150→175, dmg 6→8; Sky drones 65→55 ore; Sky AI barracks mix 30% drones / 10% kamikaze / 60% riflemen.
+- **AI wave cohesion** (the real Sky fix): a marching AI wave keeps its drones over its ground units (end of `aiTick`), so fast flyers no longer arrive alone and die one by one. Applies to every AI faction, so the enemy AI is slightly tougher too.
+- **Tools:** `balance.js` now plays AI vs AI round robin on 4 parallel workers and reports Hacker stats, with a `nohack` A/B switch; `clash.js` now fights equal-ore armies, every faction vs every other.
+
 **Open questions the owner has not answered yet**
 
 - **Sounds:** every sound is synthesized and was tuned without anyone listening during development. The owner approved rifle fire, tank cannon, building-complete, upgrade-complete, relic and the siren. Still waiting for their verdict on the newest ones: infantry death cry (`die`, the least certain), vehicle explosion (`vboom`), drone pop (`dboom`), unit-ready (`ready`) and vehicle-ready (`vready`). If synthesis is still not good enough for gunfire/explosions, the agreed next step is real recorded samples embedded in the file — only with the owner's go-ahead (licensing, file size).
-- **`balance.js`:** its player-side bot is weaker than the real AI and every game times out at 3:00, so its win rates are not meaningful. Offered: make it use `aiTick(0)` for the player side. Not approved yet.
-- **Balance:** `clash.js` shows Iron Militia winning ~100% and Smugglers ~0% of equal-army fights. Not tuned yet. Engineer/Hacker numbers (repair 14 hp/s, rig 3 ore/s, hack 1.2 ore/s, costs 80/130) are first guesses.
+- **Balance:** whole-game win rates are now 45–55% for every faction (AI vs AI). Not yet felt by the owner on the phone. `clash.js` (pure equal-ore fights) still shows Armed pickups winning every head-to-head and Smugglers losing every one; that is a combat-only lens (Smugglers' edge is economy), but watch whether pickups feel too strong in play.
+- **Hackers:** at 550 + Hacker cell they are a slow investment: one Hacker siphons ~1,000 ore over its life, and the `nohack` A/B shows they no longer swing games. Rig 3 ore/s and hack 1.2 ore/s unchanged. The AI only ever rigs oil, never uses Hack.
+- **Fog of war:** the AI still sees everything (it never had vision rules). Fog edge softness and darkness (`TUNABLES.fog`) not yet seen by the owner.
 - **Units walk over ore/oil** now (trade-off of the no-wedging fix). The owner has not commented on the look.
 
-**Next on the backlog:** fog of war, then save/resume (see *Backlog*).
+**Next on the backlog:** save/resume (see *Backlog*).
 
 ---
 
@@ -72,7 +80,8 @@ One HTML file with three parts: `<style>`, a little static DOM (HUD, minimap, bo
 | Buildings | `updBld` (construction, production, research, turret fire) |
 | Upgrades | `UPG`, `DOCTRINE`, `research`, `lvl`, `unitMaxHp`, `unitSpd`, `dmgMult`, `rangeOf`, `trainTime`, `refreshUnits` |
 | Physics | `separate` (unit/building/obstacle overlap resolution) |
-| AI opponent | `aiTick(team)`, `aiBuild`, `playerTarget`, `aiOf`, `STRATS` (sandbox runs `aiTick(0)` too) |
+| AI opponent | `aiTick(team)`, `aiBuild`, `playerTarget`, `aiOf`, `STRATS` (sandbox runs `aiTick(0)` too); wave cohesion for drones at the end of `aiTick` |
+| Fog of war | `fogInit`, `updFog`, `vis0`, `seen0`, `sightOf`, `fogOn`, `fogCv` |
 | Relic pickup | top of `update()`; random placement in `relicSpot` |
 | Icons | `ICON`, `iconSVG`, `UPGICON`, `FEMB` |
 | Drawing | `draw`, `drawBld`, `drawUnit`, `drawDrone`, `drawRes`, `drawMini`, `hpBar` |
@@ -109,19 +118,23 @@ One HTML file with three parts: `<style>`, a little static DOM (HUD, minimap, bo
 | Faction | Identity | Passive | Doctrine (HQ upgrade) |
 |---|---|---|---|
 | Mountain Cell | Ambush | Still 2s → invisible; first shot +50% | Hide after 1s; ambush shot ×2 |
-| Urban Network | Swarm | Riflemen −30%, build +40% faster, −20% HP structures | Barracks train 35% faster |
-| Sky Brigade | Drones | Cheaper drones + Kamikaze unit | Drones +30% HP, bigger blasts |
-| Smugglers | Economy | +25% ore, Cargo truck worker, −20% HP combat | Every unit −15% cost |
+| Urban Network | Swarm | Riflemen −10% (54 ore), build +40% faster, −20% HP structures | Barracks train 35% faster |
+| Sky Brigade | Drones | Cheaper drones (55 ore) + Kamikaze unit | Drones +30% HP, bigger blasts |
+| Smugglers | Economy | +10% ore, Cargo truck worker (carries 12), −20% HP combat | Every unit −15% cost |
 | Iron Militia | Speed | Factory builds Armed pickups (hit air) not tanks | Pickups +40% HP, +10% speed |
-| Shadow Cell | Sabotage | Saboteur disables buildings 12s; all units +15% speed | Sabotage 20s, recharge 2× faster |
+| Shadow Cell | Sabotage | Saboteur disables buildings 12s; all units +10% speed | Sabotage 20s, recharge 2× faster |
 
 **Engineer** (all factions, HQ): repairs any damaged friendly unit or finished building within its sight on its own; tap a damaged unit/building with engineers selected to send them. Upgrade: *Field tools* (+30% repair per level).
 
-**Hacker** (Urban Network, Shadow Cell, Smugglers only; HQ): can only be trained once the team has a worker **and** an engineer alive. Two exclusive jobs: tap an **oil pool** → it stands there and siphons it (`TUNABLES.hack.rigRate`, more ore, drains the pool); press **Hack** → from anywhere it drains the enemy's banked ore straight to you (`hackRate`, less ore). Moving it stops the job. The victim gets a toast + minimap ping. Upgrades: *Exploit kit* (+30% rate per level), *Burner rigs* (+25% hacker HP per level). The `HACKERS` list holds the allowed factions.
+**Hacker** (Urban Network, Shadow Cell, Smugglers only; HQ; 550 ore): can only be trained after the HQ research **Hacker cell** (`hackNet`, 250 ore) and while the team has a worker **and** an engineer alive. `UNIT.hacker.res` names the research; `UPG.need` hides the hacker upgrades until it is done. Two exclusive jobs: tap an **oil pool** → it stands there and siphons it (`TUNABLES.hack.rigRate`, more ore, drains the pool); press **Hack** → from anywhere it drains the enemy's banked ore straight to you (`hackRate`, less ore). Moving it stops the job. The victim gets a toast + minimap ping. Upgrades: *Exploit kit* (+30% rate per level), *Burner rigs* (+25% hacker HP per level). The `HACKERS` list holds the allowed factions.
 
 Faction effects are applied in `unitMaxHp`, `unitSpd`, `costOf`, `trainsFor`, `trainTime`, `fire` (ambush), `updStealth`, `updSaboteur`, `blast`. To rebalance, those are the only places to touch.
 
 ---
+
+## Fog of war
+
+Your side (team 0) only sees what its units and buildings see: unit `sight` (150 if none), buildings `size*2+150`, turrets their range +25. Vision lives on a 20px grid in `G.fog` (`vis` = in sight now, `seen` = explored, `lit` = soft-edge strength), refreshed every 0.15 s by `updFog` and drawn as one small canvas (`fogCv`) stretched over the world and the minimap, with smoothing for soft edges. Darkness: `TUNABLES.fog.explored` / `.unexplored`. Enemy units are drawn, tappable and audible only while in sight (`seen0`/`vis0`); enemy buildings stay on the map once spotted (`e.seen0`). Resources are always drawn. Off in sandbox (`G.sandbox`); console `fog on|off`. The AI is not limited by fog.
 
 ## Resources
 
@@ -165,7 +178,9 @@ Keep each map's run short (≈40 simulated seconds) — full-length games across
 
 `test-sim.js` reads the extracted script from `/tmp/g.js` (on Windows, Node resolves that to `\tmp\g.js` on the current drive — create the folder once). Besides the per-map crash run it checks: relic placement (random, near-equidistant), engineer repair, hacker prerequisites and both hacker jobs, level III lock, a sandbox match with the AI on both sides, units escaping ore/oil clusters, and which sounds fire (with a fake audio context) plus mute.
 
-Other tools, all reading `./border-line-rts.html` directly: `node clash.js 50` (equal-army combat strength per faction, fast), `node balance.js 20` (whole-game win rates, a few minutes — see the caveat under *Start here*), `node console.js ...` (drives the in-game console headlessly). `clash.js` and `balance.js` use `Math.random`, so two runs never match exactly; to compare before/after a change, preload a seeded `Math.random` with `node -r ./seed.js clash.js 50`.
+Also checked: fog of war (hidden at start, spotted by a scout, buildings remembered, units not, off in sandbox), Hacker cost + Hacker cell research gate, and AI wave cohesion (drones stay over their riflemen).
+
+Other tools, all reading `./border-line-rts.html` directly: `node clash.js 20` (equal-ore armies, every faction vs every other: combat value per ore only, ~10 s), `node balance.js 8` (whole games, real AI on both sides, round robin on 4 workers: 120 games in ~3 min; the trusted balance number; prints a Hacker table; add `nohack` to A/B Hackers), `node console.js ...` (drives the in-game console headlessly). Use 8 games per pairing: below that, the noise between runs is ±20 points. `clash.js` and `balance.js` use `Math.random`, so two runs never match exactly; to compare before/after a change, preload a seeded `Math.random` with `node -r ./seed.js clash.js 50`.
 
 In a browser, the audio engine can be measured without ears: swap `window.AudioContext` for an `OfflineAudioContext`, call `audioInit()`, schedule a sound's voices with `sndVoice`, render, and read peak level and audible duration.
 
@@ -186,7 +201,7 @@ In a browser, the audio engine can be measured without ears: swap `window.AudioC
 
 1. ~~**Balance config block**~~ — done: see `TUNABLES` under *Data model*.
 2. ~~**Sound**~~ — done: synthesized in `sfx` from the `SND` table: each sound is a stack of voices (filtered white/brown noise + oscillators) with an outdoor convolution reverb, a compressor and a quiet wind bed. Guns and explosions are noise-only through a distortion bus (a pitched thump under them sounds like a drum — avoid): fire = clipped crack + darkening report tail, shell = cannon roar. Deaths are chosen in `kill`: die = infantry cry (sawtooth through moving vowel formants, `bp`), vboom = vehicle (blast + cook-off + ringing metal), dboom = drone (pop + fizz), bboom = building collapse (three blasts + rubble); boom = generic blast (shell impact, kamikaze). ready = snare rat-tat-TAT + low brass stab, vready = same with an engine rev (vehicles), built = snare roll + four-note fanfare, upg = repeated note + fifth. alert = siren, relic = bell. Helpers: `brass`, `snare`, `sndBlast`, `debris`. Context starts on the first touch, suspends when the tab is hidden; world sounds only play when on screen. Mute: Pause menu button or console `mute` (saved in localStorage `mute`).
-3. **Fog of war** — per-team vision from units/buildings using `sight`; dim unexplored terrain, hide enemy units out of vision. Biggest feel upgrade; interacts well with Mountain Cell stealth.
+3. ~~**Fog of war**~~ — done: see *Fog of war*. Possible follow-up: make the AI obey vision too.
 4. **Save/resume** — serialize `G` to localStorage so a backgrounded match survives. Entities are plain objects; watch the `order.res`/`target`/`res` cross-references (store ids, rehydrate).
 5. **Monetization hooks** — free base + unlockable factions/maps, or a one-time unlock. Decide before production; it shapes the store screen.
 6. **Audio/haptics settings + a brief tutorial** for first launch.
@@ -219,6 +234,7 @@ faction <id> / enemy <id>  swap a side live
 map <id>                   restart on a map
 fast <0.25-8>              time multiplier (also the ×1 button in the top bar)
 mute                       toggle sound (also in the Pause menu)
+fog [on|off]               fog of war on your side (always off in sandbox)
 sandbox [on|off]           AI plays your side too, live
 strat <name> [team]        AI strategy for a side (1 = enemy, default; 0 = you)
 strats                     list strategies; mod your own: STRATS.mine={wave:4,first:90}

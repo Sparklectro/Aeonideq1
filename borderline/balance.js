@@ -1,13 +1,52 @@
 // Border Line — balance sweep.
-// Self-contained: reads ./border-line-rts.html, runs the real game logic headlessly,
-// pits each faction against the enemy AI over many games, prints a win-rate table.
-//   node balance.js            (defaults: 8 games per faction)
-//   node balance.js 20         (20 games per faction)
-// Both sides use the same strategy, so win rate reflects faction strength, not tactics.
+// Self-contained: reads ./border-line-rts.html, runs the real game logic headlessly.
+// The real AI plays BOTH sides (same 'balanced' strategy, normal difficulty), round robin:
+// every faction meets every other faction on rotating maps, swapping sides each game.
+// Games run on 4 parallel workers. Also reports what Hackers did (count, ore siphoned/stolen).
+//   node balance.js              (2 games per pairing = 30 games)
+//   node balance.js 5            (5 games per pairing = 75 games)
+//   node balance.js 5 nohack     (same, but the AI never trains Hackers: A/B their impact)
+// Win rate reflects faction strength, not tactics. Use `node -r ./seed.js balance.js` to compare before/after.
 
 const fs = require('fs');
-const GAMES = Math.max(2, parseInt(process.argv[2] || '8', 10));
-const MAX_SECONDS = 180;
+const GAMES = Math.max(1, parseInt(process.argv[2] || '2', 10));
+const NOHACK = process.argv.includes('nohack');
+const MAX_SECONDS = 1200, WORKERS = 4;
+const SHARD = process.env.BL_SHARD; // set on worker processes: "i/n"
+
+if (SHARD === undefined) {
+  // ---- parent: fan out to workers, merge their JSON, print the tables ----
+  const { spawn } = require('child_process');
+  let done = 0; const all = [];
+  for (let i = 0; i < WORKERS; i++) {
+    const c = spawn(process.execPath, [...process.execArgv, __filename, ...process.argv.slice(2)], { env: { ...process.env, BL_SHARD: i + '/' + WORKERS } });
+    let out = ''; c.stdout.on('data', d => out += d); c.stderr.on('data', d => process.stderr.write(d));
+    c.on('close', () => { all.push(...JSON.parse(out)); if (++done === WORKERS) report(all); });
+  }
+  function report(R) {
+    const facs = [...new Set(R.flatMap(r => [r.a, r.b]))], name = JSON.parse(R[0].names);
+    const W = {}, P = {}, M = {}, H = {};
+    facs.forEach(f => { W[f] = 0; P[f] = 0; M[f] = {}; facs.forEach(g => M[f][g] = 0); H[f] = { n: 0, rig: 0, hack: 0, games: 0, mins: 0 }; });
+    let timeouts = 0, tSum = 0;
+    for (const r of R) { P[r.a]++; P[r.b]++; tSum += r.t;
+      r.teams.forEach(tm => { const h = H[tm.fac]; h.games++; h.n += tm.hackers; h.rig += tm.rig; h.hack += tm.hack; h.mins += r.t / 60; });
+      if (r.w === null) { timeouts++; continue; } W[r.w]++; M[r.w][r.w === r.a ? r.b : r.a]++; }
+    const pad = (s, n) => (s + '').padEnd(n), sh = f => name[f].split(' ')[0].slice(0, 7);
+    console.log('Border Line balance — AI vs AI round robin, ' + GAMES + ' game(s) per pairing, normal' + (NOHACK ? ', NO HACKERS' : '') + '\n');
+    console.log(pad('Faction', 16) + pad('Win%', 6) + pad('W/Games', 9) + '  wins vs: ' + facs.map(f => pad(sh(f), 8)).join(''));
+    console.log('-'.repeat(32 + 8 * facs.length));
+    facs.slice().sort((x, y) => W[y] / P[y] - W[x] / P[x]).forEach(f =>
+      console.log(pad(name[f], 16) + pad(Math.round(W[f] / P[f] * 100) + '%', 6) + pad(W[f] + '/' + P[f], 9) + '  ' + pad('', 9) + facs.map(g => pad(g === f ? '-' : M[f][g] + '/' + (M[f][g] + M[g][f]), 8)).join('')));
+    const avg = Math.round(tSum / R.length);
+    console.log('\n' + R.length + ' games, ' + timeouts + ' timeouts (' + MAX_SECONDS / 60 + ' min cap), average length ' + Math.floor(avg / 60) + ':' + String(avg % 60).padStart(2, '0'));
+    console.log('50% is balanced. Consistently >60% or <40% means that faction needs tuning.\n');
+    console.log('Hackers (per game)   trained   siphoned(rig)   stolen(hack)   ore/min');
+    facs.filter(f => H[f].n).forEach(f => { const h = H[f];
+      console.log(pad(name[f], 21) + pad((h.n / h.games).toFixed(2), 10) + pad(Math.round(h.rig / h.games), 16) + pad(Math.round(h.hack / h.games), 15) + ((h.rig + h.hack) / h.mins).toFixed(1)); });
+    if (!facs.some(f => H[f].n)) console.log('  none trained');
+  }
+  return;
+}
 
 // ---- browser stub so the game script runs in Node ----
 const noop = () => {};
@@ -25,68 +64,35 @@ const code = html.match(/<script>([\s\S]*)<\/script>/)[1];
 
 const runner = `
 ;(function(){
-  const GAMES = ${GAMES}, MAX_SECONDS = ${MAX_SECONDS};
+  const GAMES = ${GAMES}, MAX_SECONDS = ${MAX_SECONDS}, SHARD = '${SHARD}'.split('/').map(Number);
   const MAPS_LIST = ['crossroads','delta','highlands','saltflats','canyon'];
+  if (${NOHACK}) TUNABLES.ai.hackers = 0;
 
-  function playerBot(){
-    const mine = G.ents.filter(e=>e.team===0 && !e.dead && e.kind!=='res');
-    const hq = mine.find(e=>e.type==='hq'); if(!hq) return;
-    const blds = mine.filter(e=>e.kind==='bld'), cnt = t=>blds.filter(b=>b.type===t).length;
-    const units = mine.filter(e=>e.kind==='unit'), workers = units.filter(isWorker), army = units.filter(u=>!isWorker(u));
-    const cr = ()=>G.credits[0];
-    workers.forEach(w=>{ if(!w.order) autoGather(w); });
-    if(FAC[0]==='smugglers' && workers.length>=6 && units.filter(u=>u.type==='truck').length<3 && hq.queue.length<2 && cr()>=140) train(hq,'truck');
-    if(workers.length + hq.queue.filter(q=>isWorker(q)).length < 11 && hq.queue.length<2) train(hq,'worker');
-    const build0 = type=>{ for(let i=0;i<40;i++){ const a=rand(0,6.3), r=rand(110,260), x=hq.x+Math.cos(a)*r, y=hq.y+Math.sin(a)*r; if(canPlace(0,type,x,y)){ placeBld(0,type,x,y); return true; } } return false; };
-    let built=false; const free = popCap(0)-popUsed(0);
-    if(free<5 && popCap(0)<POPMAX && !blds.some(b=>b.type==='depot'&&!b.built) && cr()>=100) built=build0('depot');
-    else if(cnt('barracks')<1 && cr()>=150) built=build0('barracks');
-    else if(cnt('barracks')<2 && G.t>200 && cr()>=190) built=build0('barracks');
-    else if(cnt('factory')<1 && hasBuilt(0,'barracks') && G.t>210 && cr()>=260) built=build0('factory');
-    else if(cnt('turret')<2 && G.t>110 && cr()>=170) built=build0('turret');
-    if(!built) blds.forEach(b=>{ if(!b.built || b.queue.length>=2) return; const tr=trainsFor(0,b.type); if(!tr) return;
-      if(b.type==='barracks') train(b, Math.random()<0.33 ? tr[tr.length-1] : tr[0]);
-      else if(b.type==='factory' && cr()>=costOf(0,tr[0])+20) train(b, tr[0]); });
-    const enemyHQ = G.ents.find(e=>e.team===1 && e.type==='hq');
-    if(enemyHQ && army.length>=12){ G._push0 = true; }
-    if(G._push0 && enemyHQ) army.forEach(u=>{ if((!u.order || u.order.type!=='attack') && !u.target){ u.order={type:'attack',target:enemyHQ}; u.target=enemyHQ; } });
+  // measure Hackers: how many get trained, and the ore their two jobs bring in
+  let HS = null;
+  const _spawn = spawnUnit; spawnUnit = function(type, team, x, y){ const u = _spawn(type, team, x, y); if (type === 'hacker' && HS) HS[team].hackers++; return u; };
+  const _hack = updHacker; updHacker = function(u, dt){ const c = G.credits[u.team]; _hack(u, dt); const g = G.credits[u.team] - c;
+    if (g > 0 && u.order) HS[u.team][u.order.type === 'hack' ? 'hack' : 'rig'] += g; };
+
+  // one AI-vs-AI match; returns 0 or 1 (winning team) or -1 on timeout
+  function playOne(f0, f1, map){
+    facId = f0; sandboxMode = true; newGame('normal', map);
+    FAC[1] = f1; COL[1] = FACTIONS[f1].col;
+    HS = [0,1].map(t => ({ fac: FAC[t], hackers: 0, rig: 0, hack: 0 }));
+    for(let i=0;i<60*MAX_SECONDS && !G.over;i++) update(1/60);
+    return G.over ? (G.win ? 0 : 1) : -1;
   }
 
-  function playOne(pf, ef, map){
-    facId = pf; newGame('normal', map);
-    FAC[1] = ef; COL[1] = FACTIONS[ef].col;
-    let botT = 0;
-    for(let i=0;i<60*MAX_SECONDS && !G.over;i++){ update(1/60); botT += 1/60; if(botT>=1){ botT=0; playerBot(); } }
-    if(G.over) return { win: !!G.win, draw:false, t: G.t };
-    // timed out: score by who was ahead — damage dealt to the enemy HQ, then army size
-    const myHQ = G.ents.find(e=>e.team===0&&e.type==='hq'), enHQ = G.ents.find(e=>e.team===1&&e.type==='hq');
-    const myDmg = enHQ ? enHQ.max-enHQ.hp : 1e9, enDmg = myHQ ? myHQ.max-myHQ.hp : 1e9;
-    const myArmy = G.ents.filter(e=>e.kind==='unit'&&e.team===0&&!isWorker(e)).length;
-    const enArmy = G.ents.filter(e=>e.kind==='unit'&&e.team===1&&!isWorker(e)).length;
-    const win = myDmg!==enDmg ? myDmg>enDmg : myArmy>enArmy;
-    return { win, draw:false, t: G.t, timeout:true };
+  const facs = Object.keys(FACTIONS), n = facs.length, out = [];
+  const names = JSON.stringify(Object.fromEntries(facs.map(f => [f, FACTIONS[f].name])));
+  let k = 0;
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) for(let g=0;g<GAMES;g++, k++){
+    if (k % SHARD[1] !== SHARD[0]) continue;
+    const a = facs[i], b = facs[j], swap = (g + i + j) % 2, map = MAPS_LIST[k % MAPS_LIST.length];
+    const f0 = swap ? b : a, f1 = swap ? a : b, r = playOne(f0, f1, map);
+    out.push({ a, b, map, t: Math.round(G.t), w: r < 0 ? null : r === 0 ? f0 : f1, names, teams: HS.map(h => ({ fac: h.fac, hackers: h.hackers, rig: Math.round(h.rig), hack: Math.round(h.hack) })) });
   }
-
-  const facs = Object.keys(FACTIONS);
-  console.log('Border Line balance — ' + GAMES + ' games/faction, both sides same strategy, normal difficulty\\n');
-  const rows = [];
-  for(const pf of facs){
-    let wins=0, draws=0, timeSum=0, n=0;
-    for(let g=0;g<GAMES;g++){
-      let ef = facs[(facs.indexOf(pf)+1+g) % facs.length];
-      if(ef===pf) ef = facs[(facs.indexOf(pf)+2) % facs.length];
-      const map = MAPS_LIST[g % MAPS_LIST.length];
-      const r = playOne(pf, ef, map);
-      if(r.win) wins++; if(r.timeout) draws++; timeSum += r.t; n++;
-    }
-    rows.push({ fac: FACTIONS[pf].name, wr: Math.round(wins/GAMES*100), wins, decided: GAMES, draws, avg: n?Math.round(timeSum/n):0 });
-  }
-  rows.sort((a,b)=>b.wr-a.wr);
-  const pad = (s,n)=>(s+'').padEnd(n);
-  console.log(pad('Faction',16)+pad('Win%',6)+pad('W/Games',10)+pad('Timeouts',10)+'AvgGame');
-  console.log('-'.repeat(48));
-  for(const r of rows) console.log(pad(r.fac,16)+pad(r.wr+'%',6)+pad(r.wins+'/'+r.decided,10)+pad(''+r.draws,10)+(r.avg?(Math.floor(r.avg/60)+':'+String(r.avg%60).padStart(2,'0')):'—'));
-  console.log('\\n50% is balanced. Consistently >60% or <40% means that faction needs tuning.');
+  console.log(JSON.stringify(out));
 })();
 `;
 
